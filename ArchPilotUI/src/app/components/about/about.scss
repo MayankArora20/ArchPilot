@@ -1,0 +1,44 @@
+.about-container {
+  padding: 6rem 2rem 2rem;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+
+  .content {
+    max-width: 800px;
+    color: var(--text-color);
+
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 2rem;
+      text-align: center;
+    }
+
+    section {
+      margin-bottom: 2rem;
+
+      h2 {
+        font-size: 1.8rem;
+        margin-bottom: 1rem;
+        border-bottom: 2px solid var(--text-color);
+        padding-bottom: 0.5rem;
+      }
+
+      p {
+        font-size: 1.1rem;
+        line-height: 1.6;
+        margin-bottom: 1rem;
+      }
+
+      ul, ol {
+        font-size: 1.1rem;
+        line-height: 1.8;
+        margin-left: 2rem;
+
+        li {
+          margin-bottom: 0.5rem;
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+<nav class="menu">
+  <div class="menu-brand">
+    <a routerLink="/">ArchPilot</a>
+  </div>
+  <ul class="menu-items">
+    <li class="dropdown">
+      <a>Project</a>
+      <ul class="dropdown-menu">
+        <li><a routerLink="/add-project">Add New Project</a></li>
+        <li><a routerLink="/existing-project">Existing Project</a></li>
+      </ul>
+    </li>
+    <li><a (click)="toggleTheme()">Invert Color</a></li>
+    <li><a routerLink="/about">About Us</a></li>
+  </ul>
+</nav>

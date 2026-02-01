@@ -1,0 +1,17 @@
+<div class="plantuml-container">
+  <div class="header">
+    <h2>Project: {{ projectName }}</h2>
+  </div>
+  
+  <div class="diagram-wrapper">
+    @if (diagramUrl) {
+      <img [src]="diagramUrl" alt="PlantUML Diagram" />
+    } @else {
+      <p>No diagram available</p>
+    }
+  </div>
+
+  <div class="actions">
+    <button class="btn-primary" (click)="addNewRequirement()">Add New Requirement</button>
+  </div>
+</div>

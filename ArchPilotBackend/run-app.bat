@@ -1,0 +1,3 @@
+@echo off
+echo Starting ArchPilot with local profile...
+gradlew.bat bootRun --args='--spring.profiles.active=local'

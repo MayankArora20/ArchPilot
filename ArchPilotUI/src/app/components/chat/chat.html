@@ -1,0 +1,68 @@
+<div class="chat-container">
+  <div class="chat-header">
+    <h2>AI Chat - Requirement Engineering</h2>
+    <div class="project-info">
+      <div class="project-name">{{ projectName }}</div>
+      @if (sessionInfo) {
+        <div class="session-info">
+          Session: {{ sessionInfo.sessionId.substring(0, 8) }}...
+          <button class="clear-btn" (click)="clearSession()" title="Clear session">🗑️</button>
+        </div>
+      }
+    </div>
+  </div>
+
+  <div class="messages">
+    @if (messages.length === 0) {
+      <div class="welcome-message">
+        <p>Welcome to the AI Chat! Start by asking questions or adding requirements for your project.</p>
+      </div>
+    }
+    @for (message of messages; track $index) {
+      <div class="message" [class.user]="message.role === 'user'" [class.assistant]="message.role === 'assistant'">
+        <div class="message-content">{{ message.content }}</div>
+        @if (message.timestamp) {
+          <div class="message-time">{{ message.timestamp | date:'short' }}</div>
+        }
+      </div>
+    }
+  </div>
+
+  <div class="input-area">
+    <input 
+      type="text" 
+      [(ngModel)]="currentMessage" 
+      (keyup.enter)="sendMessage()"
+      [disabled]="chatState === ChatState.Streaming"
+      placeholder="Type your message..."
+    />
+    <button 
+      (click)="sendMessage()" 
+      [disabled]="chatState === ChatState.Streaming || !currentMessage.trim()"
+    >
+      @if (chatState === ChatState.Streaming) {
+        Sending...
+      } @else {
+        Send
+      }
+    </button>
+  </div>
+
+  @if (chatState === ChatState.Streaming) {
+    <div class="status streaming">AI is responding...</div>
+  }
+  @if (chatState === ChatState.Error && errorMessage) {
+    <div class="status error">
+      {{ errorMessage }} <button (click)="retry()">Retry</button>
+    </div>
+  }
+</div>
+
+@if (showModal) {
+  <div class="modal">
+    <div class="modal-content">
+      <h3>Requirements updated successfully</h3>
+      <button (click)="closeModal()">OK</button>
+    </div>
+  </div>
+}

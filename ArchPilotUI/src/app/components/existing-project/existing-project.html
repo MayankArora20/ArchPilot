@@ -1,0 +1,40 @@
+<div class="existing-project-container">
+  <div class="header">
+    <h2>Existing Projects</h2>
+  </div>
+
+  <div class="content">
+    <div class="form-group">
+      <label for="projectSelect">Select a Project</label>
+      <select 
+        id="projectSelect"
+        [(ngModel)]="selectedProject"
+      >
+        <option value="">-- Select a project --</option>
+        @for (project of projects; track project) {
+          <option [value]="project">{{ project }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="actions">
+      <button (click)="loadProject()" [disabled]="!selectedProject || loading">
+        {{ loading ? 'Loading...' : 'Load Project' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+@if (showErrorModal) {
+  <div class="modal">
+    <div class="modal-content">
+      <h3>Error</h3>
+      <ul>
+        @for (reason of errorReasons; track $index) {
+          <li>{{ reason }}</li>
+        }
+      </ul>
+      <button (click)="closeErrorModal()">Close</button>
+    </div>
+  </div>
+}

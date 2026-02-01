@@ -1,0 +1,70 @@
+<div class="add-project-container">
+  <div class="header">
+    <h2>Add New Project</h2>
+  </div>
+
+  <div class="tabs">
+    <button 
+      [class.active]="activeTab === 'repository'" 
+      (click)="activeTab = 'repository'"
+    >
+      Repository Link
+    </button>
+    <button 
+      [class.active]="activeTab === 'requirement'" 
+      (click)="activeTab = 'requirement'"
+    >
+      Requirement
+    </button>
+  </div>
+
+  <div class="tab-content">
+    @if (activeTab === 'repository') {
+      <div class="form-group">
+        <label for="gitUrl">Git Repository URL</label>
+        <input 
+          id="gitUrl"
+          type="text" 
+          [(ngModel)]="gitUrl" 
+          placeholder="https://github.com/username/repo.git"
+        />
+      </div>
+      <div class="actions">
+        <button (click)="analyzeRepository()" [disabled]="loading">
+          {{ loading ? 'Analyzing...' : 'Analyze Repository' }}
+        </button>
+      </div>
+    }
+
+    @if (activeTab === 'requirement') {
+      <div class="form-group">
+        <label for="projectName">Project Name</label>
+        <input 
+          id="projectName"
+          type="text" 
+          [(ngModel)]="projectName" 
+          placeholder="Enter project name"
+        />
+      </div>
+      <div class="actions">
+        <button (click)="startRequirementChat()" [disabled]="!projectName.trim()">
+          Start Chat
+        </button>
+      </div>
+    }
+  </div>
+</div>
+
+@if (showErrorModal) {
+  <div class="modal">
+    <div class="modal-content">
+      <h3>Error</h3>
+      <ul>
+        @for (reason of errorReasons; track $index) {
+          <li>{{ reason }}</li>
+        }
+      </ul>
+      <button (click)="closeErrorModal()">Close</button>
+    </div>
+  </div>
+}
