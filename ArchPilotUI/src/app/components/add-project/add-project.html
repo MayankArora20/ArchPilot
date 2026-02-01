@@ -26,12 +26,182 @@
           id="gitUrl"
           type="text" 
           [(ngModel)]="gitUrl" 
+          (ngModelChange)="onGitUrlChange()"
           placeholder="https://github.com/username/repo.git"
         />
+        @if (verifying) {
+          <div class="verification-status verifying">
+            <span class="spinner"></span>
+            Verifying repository...
+          </div>
+        }
       </div>
+
+      @if (showVerificationResult && verificationResult) {
+        <div class="verification-result" [class.verified]="verificationResult.status === 'success'" [class.error]="verificationResult.status === 'error'">
+          <div class="result-header">
+            <span class="status-icon">
+              @if (verificationResult.status === 'success') {
+                ✓
+              } @else {
+                ✗
+              }
+            </span>
+            <span class="status-text">{{ verificationResult.status === 'success' ? 'Verified' : 'Error' }}</span>
+            <button class="close-btn" (click)="closeVerificationResult()">×</button>
+          </div>
+          <div class="result-content">
+            <p class="message">{{ verificationResult.message }}</p>
+            @if (verificationResult.data) {
+              <div class="repo-info">
+                <h4>Repository Information:</h4>
+                <div class="info-grid">
+                  <div class="info-item">
+                    <strong>Name:</strong> {{ verificationResult.data.name }}
+                  </div>
+                  <div class="info-item">
+                    <strong>Full Name:</strong> {{ verificationResult.data.fullName }}
+                  </div>
+                  @if (verificationResult.data.description) {
+                    <div class="info-item">
+                      <strong>Description:</strong> {{ verificationResult.data.description }}
+                    </div>
+                  }
+                  <div class="info-item">
+                    <strong>Default Branch:</strong> {{ verificationResult.data.defaultBranch }}
+                  </div>
+                  <div class="info-item">
+                    <strong>Language:</strong> {{ verificationResult.data.language || 'Not specified' }}
+                  </div>
+                  <div class="info-item">
+                    <strong>Platform:</strong> {{ verificationResult.data.platform }}
+                  </div>
+                  <div class="info-item">
+                    <strong>Visibility:</strong> {{ verificationResult.data.private ? 'Private' : 'Public' }}
+                  </div>
+                </div>
+              </div>
+            }
+            
+            @if (verificationResult.status === 'success') {
+              <div class="branch-fetch-section">
+                @if (!fetchingBranches && !branchesResult) {
+                  <button class="fetch-branches-btn" (click)="manualFetchBranches()">
+                    Fetch Branches
+                  </button>
+                }
+                <button class="fetch-branches-btn" (click)="testBranchesDirectly()" style="margin-left: 10px; background-color: #ffc107; color: #212529;">
+                  Test Branches API
+                </button>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      @if (fetchingBranches) {
+        <div class="branches-loading">
+          <span class="spinner"></span>
+          Fetching branches...
+        </div>
+      }
+
+      <!-- Debug info -->
+      <div class="debug-info" style="font-size: 0.8rem; color: #666; margin: 0.5rem 0;">
+        Debug: Verifying={{ verifying }}, FetchingBranches={{ fetchingBranches }}, 
+        VerificationStatus={{ verificationResult?.status }}, 
+        BranchesStatus={{ branchesResult?.status }}, 
+        BranchCount={{ branchesResult?.data?.branches?.length || 0 }}
+      </div>
+
+      @if (branchesResult && branchesResult.status === 'success' && branchesResult.data?.branches) {
+        <div class="branches-section">
+          <div class="form-group">
+            <label for="branchSelect">Select Branch ({{ branchesResult.data.totalBranches }} available)</label>
+            <select id="branchSelect" [(ngModel)]="selectedBranch">
+              @for (branch of branchesResult.data.branches; track branch.name) {
+                <option [value]="branch.name">
+                  {{ branch.name }}
+                  @if (branch.default) {
+                    (default)
+                  }
+                  @if (branch.protected) {
+                    🔒
+                  }
+                </option>
+              }
+            </select>
+          </div>
+          
+          @if (selectedBranch) {
+            <div class="selected-branch-info">
+              @for (branch of branchesResult.data.branches; track branch.name) {
+                @if (branch.name === selectedBranch) {
+                  <div class="branch-details">
+                    <h5>Branch Details:</h5>
+                    <div class="branch-info-grid">
+                      <div class="branch-info-item">
+                        <strong>Name:</strong> {{ branch.name }}
+                      </div>
+                      <div class="branch-info-item">
+                        <strong>SHA:</strong> {{ branch.sha.substring(0, 8) }}...
+                      </div>
+                      @if (branch.lastCommitMessage) {
+                        <div class="branch-info-item">
+                          <strong>Last Commit:</strong> {{ branch.lastCommitMessage }}
+                        </div>
+                      }
+                      @if (branch.lastCommitAuthor) {
+                        <div class="branch-info-item">
+                          <strong>Author:</strong> {{ branch.lastCommitAuthor }}
+                        </div>
+                      }
+                      <div class="branch-info-item">
+                        <strong>Status:</strong>
+                        @if (branch.default) {
+                          <span class="badge default">Default</span>
+                        }
+                        @if (branch.protected) {
+                          <span class="badge protected">Protected</span>
+                        }
+                        @if (!branch.default && !branch.protected) {
+                          <span class="badge regular">Regular</span>
+                        }
+                      </div>
+                    </div>
+                  </div>
+                }
+              }
+            </div>
+          }
+        </div>
+      }
+
+      @if (branchesResult && branchesResult.status === 'error') {
+        <div class="branches-error">
+          <p>⚠️ {{ branchesResult.message }}</p>
+        </div>
+      }
+
       <div class="actions">
-        <button (click)="analyzeRepository()" [disabled]="loading">
+        <button (click)="verifyRepository()" [disabled]="verifying || !gitUrl.trim()">
+          {{ verifying ? 'Verifying...' : 'Verify Repository' }}
+        </button>
+        <button 
+          (click)="analyzeRepository()" 
+          [disabled]="loading || !verificationResult || verificationResult.status !== 'success' || !selectedBranch"
+          [class.primary]="verificationResult?.status === 'success' && selectedBranch"
+        >
           {{ loading ? 'Analyzing...' : 'Analyze Repository' }}
+        </button>
+        
+        <!-- Debug buttons -->
+        <button 
+          (click)="testBranchesDirectly()" 
+          [disabled]="!gitUrl.trim()"
+          style="background-color: #dc3545; margin-left: 10px;"
+        >
+          🧪 Test Branches
         </button>
       </div>
     }

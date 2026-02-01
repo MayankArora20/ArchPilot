@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test</title>
+</head>
+<body>
+    <h1>Repository API Test</h1>
+    
+    <div>
+        <h2>Test Repository Verification</h2>
+        <input type="text" id="repoUrl" placeholder="https://github.com/user/repo" style="width: 400px;">
+        <button onclick="testVerify()">Test Verify</button>
+        <div id="verifyResult"></div>
+    </div>
+    
+    <div>
+        <h2>Test Repository Branches</h2>
+        <button onclick="testBranches()">Test Branches (uses URL above)</button>
+        <div id="branchesResult"></div>
+    </div>
+
+    <script>
+        async function testVerify() {
+            const url = document.getElementById('repoUrl').value;
+            if (!url) {
+                alert('Please enter a repository URL');
+                return;
+            }
+            
+            try {
+                console.log('Testing verify API with URL:', url);
+                const response = await fetch('/api/repository/verify', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ repositoryUrl: url })
+                });
+                
+                const result = await response.json();
+                console.log('Verify result:', result);
+                document.getElementById('verifyResult').innerHTML = '<pre>' + JSON.stringify(result, null, 2) + '</pre>';
+            } catch (error) {
+                console.error('Verify error:', error);
+                document.getElementById('verifyResult').innerHTML = '<div style="color: red;">Error: ' + error.message + '</div>';
+            }
+        }
+        
+        async function testBranches() {
+            const url = document.getElementById('repoUrl').value;
+            if (!url) {
+                alert('Please enter a repository URL');
+                return;
+            }
+            
+            try {
+                console.log('Testing branches GET API with URL:', url);
+                const params = new URLSearchParams({
+                    url: url,
+                    limit: '10'
+                });
+                
+                const response = await fetch(`/api/repository/branches?${params.toString()}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const result = await response.json();
+                console.log('Branches result:', result);
+                document.getElementById('branchesResult').innerHTML = '<pre>' + JSON.stringify(result, null, 2) + '</pre>';
+            } catch (error) {
+                console.error('Branches error:', error);
+                document.getElementById('branchesResult').innerHTML = '<div style="color: red;">Error: ' + error.message + '</div>';
+            }
+        }
+    </script>
+</body>
+</html>

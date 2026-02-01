@@ -63,11 +63,28 @@
         background-color: var(--bg-color);
         color: var(--text-color);
       }
+
+      select {
+        width: 100%;
+        padding: 0.75rem;
+        font-size: 1rem;
+        border: 1px solid var(--text-color);
+        border-radius: 4px;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        cursor: pointer;
+
+        option {
+          background-color: var(--bg-color);
+          color: var(--text-color);
+        }
+      }
     }
 
     .actions {
       display: flex;
       justify-content: center;
+      gap: 1rem;
 
       button {
         padding: 0.75rem 2rem;
@@ -87,6 +104,238 @@
           opacity: 0.5;
           cursor: not-allowed;
         }
+
+        &.primary {
+          background-color: #007bff;
+          
+          &:hover {
+            background-color: #0056b3;
+          }
+        }
+      }
+    }
+
+    .verification-status {
+      margin-top: 0.5rem;
+      padding: 0.5rem;
+      border-radius: 4px;
+      font-size: 0.9rem;
+
+      &.verifying {
+        background-color: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffeaa7;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+
+        .spinner {
+          width: 16px;
+          height: 16px;
+          border: 2px solid #856404;
+          border-top: 2px solid transparent;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        }
+      }
+    }
+
+    .verification-result {
+      margin: 1rem 0;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+      &.verified {
+        border: 2px solid #28a745;
+        background-color: #d4edda;
+      }
+
+      &.error {
+        border: 2px solid #dc3545;
+        background-color: #f8d7da;
+      }
+
+      .result-header {
+        display: flex;
+        align-items: center;
+        padding: 1rem;
+        background-color: rgba(0, 0, 0, 0.05);
+        gap: 0.5rem;
+
+        .status-icon {
+          font-size: 1.2rem;
+          font-weight: bold;
+        }
+
+        .status-text {
+          font-weight: bold;
+          flex: 1;
+        }
+
+        .close-btn {
+          background: none;
+          border: none;
+          font-size: 1.5rem;
+          cursor: pointer;
+          padding: 0;
+          width: 24px;
+          height: 24px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 50%;
+          
+          &:hover {
+            background-color: rgba(0, 0, 0, 0.1);
+          }
+        }
+      }
+
+      .result-content {
+        padding: 1rem;
+
+        .message {
+          margin-bottom: 1rem;
+          font-style: italic;
+        }
+
+        .repo-info {
+          h4 {
+            margin-bottom: 0.5rem;
+            color: var(--text-color);
+          }
+
+          .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+
+            .info-item {
+              padding: 0.25rem 0;
+              font-size: 0.9rem;
+
+              strong {
+                color: var(--text-color);
+              }
+            }
+          }
+        }
+      }
+
+      &.verified {
+        .result-header {
+          color: #155724;
+          .status-icon { color: #28a745; }
+        }
+        .result-content {
+          color: #155724;
+        }
+      }
+
+      &.error {
+        .result-header {
+          color: #721c24;
+          .status-icon { color: #dc3545; }
+        }
+        .result-content {
+          color: #721c24;
+        }
+      }
+    }
+
+    .branches-loading {
+      margin: 1rem 0;
+      padding: 1rem;
+      background-color: #fff3cd;
+      color: #856404;
+      border: 1px solid #ffeaa7;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+
+      .spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid #856404;
+        border-top: 2px solid transparent;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+    }
+
+    .branches-section {
+      margin: 1rem 0;
+      padding: 1rem;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      background-color: rgba(0, 123, 255, 0.05);
+
+      .selected-branch-info {
+        margin-top: 1rem;
+        padding: 1rem;
+        background-color: rgba(40, 167, 69, 0.1);
+        border-radius: 4px;
+        border-left: 4px solid #28a745;
+
+        h5 {
+          margin: 0 0 0.5rem 0;
+          color: var(--text-color);
+          font-size: 1rem;
+        }
+
+        .branch-details {
+          .branch-info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+
+            .branch-info-item {
+              padding: 0.25rem 0;
+              font-size: 0.9rem;
+
+              strong {
+                color: var(--text-color);
+              }
+
+              .badge {
+                padding: 0.2rem 0.5rem;
+                border-radius: 12px;
+                font-size: 0.8rem;
+                font-weight: bold;
+
+                &.default {
+                  background-color: #007bff;
+                  color: white;
+                }
+
+                &.protected {
+                  background-color: #ffc107;
+                  color: #212529;
+                }
+
+                &.regular {
+                  background-color: #6c757d;
+                  color: white;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    .branches-error {
+      margin: 1rem 0;
+      padding: 1rem;
+      background-color: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+      border-radius: 4px;
+
+      p {
+        margin: 0;
       }
     }
   }
@@ -136,6 +385,29 @@
       &:hover {
         background-color: #c82333;
       }
+    }
+  }
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+.branch-fetch-section {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+
+  .fetch-branches-btn {
+    padding: 0.5rem 1rem;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+
+    &:hover {
+      background-color: #0056b3;
     }
   }
 }
