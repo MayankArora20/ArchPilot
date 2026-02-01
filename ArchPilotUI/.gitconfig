@@ -1,0 +1,22 @@
+[core]
+    # UI-specific git configuration
+    autocrlf = true
+    ignorecase = true
+
+[user]
+    # Override with UI-specific settings if needed
+    # name = "UI Developer"
+    # email = "ui-dev@archpilot.com"
+
+[alias]
+    # UI-specific aliases
+    ui-status = status
+    ui-log = log --oneline --graph
+    ui-build = "!npm run build"
+    ui-test = "!npm test"
+    ui-start = "!npm start"
+
+[branch]
+    # Auto-setup tracking for UI branches
+    autosetupmerge = always
+    autosetuprebase = always

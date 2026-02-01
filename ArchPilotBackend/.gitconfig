@@ -1,0 +1,23 @@
+[core]
+    # Backend-specific git configuration
+    autocrlf = true
+    ignorecase = true
+
+[user]
+    # Override with Backend-specific settings if needed
+    # name = "Backend Developer"
+    # email = "backend-dev@archpilot.com"
+
+[alias]
+    # Backend-specific aliases
+    be-status = status
+    be-log = log --oneline --graph
+    be-build = "!./gradlew build"
+    be-test = "!./gradlew test"
+    be-run = "!./gradlew bootRun"
+    be-clean = "!./gradlew clean"
+
+[branch]
+    # Auto-setup tracking for Backend branches
+    autosetupmerge = always
+    autosetuprebase = always
