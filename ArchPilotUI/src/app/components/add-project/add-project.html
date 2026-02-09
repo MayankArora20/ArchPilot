@@ -117,9 +117,9 @@
       @if (branchesResult && branchesResult.status === 'success' && branchesResult.data?.branches) {
         <div class="branches-section">
           <div class="form-group">
-            <label for="branchSelect">Select Branch ({{ branchesResult.data.totalBranches }} available)</label>
+            <label for="branchSelect">Select Branch ({{ branchesResult.data?.totalBranches || 0 }} available)</label>
             <select id="branchSelect" [(ngModel)]="selectedBranch">
-              @for (branch of branchesResult.data.branches; track branch.name) {
+              @for (branch of branchesResult.data?.branches || []; track branch.name) {
                 <option [value]="branch.name">
                   {{ branch.name }}
                   @if (branch.default) {
@@ -135,7 +135,7 @@
           
           @if (selectedBranch) {
             <div class="selected-branch-info">
-              @for (branch of branchesResult.data.branches; track branch.name) {
+              @for (branch of branchesResult.data?.branches || []; track branch.name) {
                 @if (branch.name === selectedBranch) {
                   <div class="branch-details">
                     <h5>Branch Details:</h5>

@@ -1,19 +1,28 @@
 package com.archpilot.controller;
 
-import com.archpilot.dto.RepositoryVerificationRequest;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.archpilot.dto.RepositoryBranchesRequest;
+import com.archpilot.dto.RepositoryTreeRequest;
+import com.archpilot.dto.RepositoryVerificationRequest;
 import com.archpilot.facade.RepositoryFacade;
-import com.archpilot.model.RepositoryInfo;
 import com.archpilot.model.RepositoryBranchesData;
+import com.archpilot.model.RepositoryInfo;
+import com.archpilot.model.RepositoryTreeData;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
 @RestController
@@ -70,6 +79,32 @@ public class RepositoryController {
             @RequestParam(value = "token", required = false) @Parameter(description = "Optional access token") String accessToken,
             @RequestParam(value = "limit", defaultValue = "50") @Parameter(description = "Maximum branches (1-100)") Integer limit) {
         return repositoryFacade.getRepositoryBranches(repositoryUrl, accessToken, limit).map(ResponseEntity::ok);
+    }
+    
+    @PostMapping("/tree")
+    @Operation(summary = "Get repository tree structure", description = "Retrieves the file and directory tree structure from a GitHub or GitLab repository")
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Tree structure retrieved successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid request format or URL"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public Mono<ResponseEntity<com.archpilot.model.ApiResponse<RepositoryTreeData>>> getRepositoryTree(@Valid @RequestBody RepositoryTreeRequest request) {
+        return repositoryFacade.getRepositoryTree(request).map(ResponseEntity::ok);
+    }
+    
+    @GetMapping("/tree")
+    @Operation(summary = "Get repository tree structure via GET request", description = "Retrieves repository tree structure using URL parameters")
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Tree structure retrieval completed"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Missing or invalid repository URL parameter")
+    })
+    public Mono<ResponseEntity<com.archpilot.model.ApiResponse<RepositoryTreeData>>> getRepositoryTreeGet(
+            @RequestParam("url") @Parameter(description = "Repository URL") String repositoryUrl,
+            @RequestParam(value = "token", required = false) @Parameter(description = "Optional access token") String accessToken,
+            @RequestParam(value = "branch", required = false) @Parameter(description = "Branch name (defaults to default branch)") String branch,
+            @RequestParam(value = "path", required = false) @Parameter(description = "Path within repository (defaults to root)") String path,
+            @RequestParam(value = "recursive", defaultValue = "false") @Parameter(description = "Fetch tree recursively") Boolean recursive) {
+        return repositoryFacade.getRepositoryTree(repositoryUrl, accessToken, branch, path, recursive).map(ResponseEntity::ok);
     }
     
     @GetMapping("/health")

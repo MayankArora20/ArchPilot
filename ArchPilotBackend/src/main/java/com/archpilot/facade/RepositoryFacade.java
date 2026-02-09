@@ -1,15 +1,19 @@
 package com.archpilot.facade;
 
-import com.archpilot.dto.RepositoryVerificationRequest;
-import com.archpilot.dto.RepositoryBranchesRequest;
-import com.archpilot.model.ApiResponse;
-import com.archpilot.model.RepositoryInfo;
-import com.archpilot.model.RepositoryBranchesData;
-import com.archpilot.service.RepositoryVerificationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
+import com.archpilot.dto.RepositoryBranchesRequest;
+import com.archpilot.dto.RepositoryTreeRequest;
+import com.archpilot.dto.RepositoryVerificationRequest;
+import com.archpilot.model.ApiResponse;
+import com.archpilot.model.RepositoryBranchesData;
+import com.archpilot.model.RepositoryInfo;
+import com.archpilot.model.RepositoryTreeData;
+import com.archpilot.service.RepositoryVerificationService;
+
 import reactor.core.publisher.Mono;
 
 @Component
@@ -69,6 +73,35 @@ public class RepositoryFacade {
         return getRepositoryBranches(request);
     }
     
+    public Mono<ApiResponse<RepositoryTreeData>> getRepositoryTree(RepositoryTreeRequest request) {
+        logger.info("Processing repository tree request: {}", request.getRepositoryUrl());
+        
+        return repositoryVerificationService
+                .getRepositoryTree(request.getRepositoryUrl(), request.getAccessToken(), 
+                                 request.getBranch(), request.getPath(), request.getRecursive())
+                .map(response -> {
+                    if ("Success".equals(response.getStatus())) {
+                        RepositoryTreeData treeData = mapToTreeData(response);
+                        return ApiResponse.success("Tree structure retrieved successfully", treeData);
+                    } else {
+                        return ApiResponse.<RepositoryTreeData>error(response.getMessage());
+                    }
+                })
+                .onErrorResume(ex -> {
+                    logger.error("Error in repository tree facade: {}", ex.getMessage());
+                    return Mono.just(ApiResponse.error("Internal server error: " + ex.getMessage()));
+                });
+    }
+    
+    public Mono<ApiResponse<RepositoryTreeData>> getRepositoryTree(String repositoryUrl, String accessToken, 
+                                                                  String branch, String path, Boolean recursive) {
+        RepositoryTreeRequest request = new RepositoryTreeRequest(repositoryUrl, accessToken);
+        request.setBranch(branch);
+        request.setPath(path);
+        request.setRecursive(recursive);
+        return getRepositoryTree(request);
+    }
+    
     private RepositoryInfo mapToRepositoryInfo(com.archpilot.dto.RepositoryVerificationResponse response) {
         if (response.getRepositoryInfo() == null) {
             return null;
@@ -105,5 +138,34 @@ public class RepositoryFacade {
                 .toList();
         
         return new RepositoryBranchesData(response.getRepositoryUrl(), branches, response.getPlatform());
+    }
+    
+    private RepositoryTreeData mapToTreeData(com.archpilot.dto.RepositoryTreeResponse response) {
+        if (response.getTree() == null) {
+            return null;
+        }
+        
+        var treeNodes = response.getTree().stream()
+                .map(this::mapToTreeNode)
+                .toList();
+        
+        return new RepositoryTreeData(response.getRepositoryUrl(), response.getBranch(), 
+                                    response.getPath(), treeNodes, response.getPlatform());
+    }
+    
+    private com.archpilot.model.TreeNode mapToTreeNode(com.archpilot.dto.RepositoryTreeResponse.TreeItem item) {
+        com.archpilot.model.TreeNode node = new com.archpilot.model.TreeNode(
+                item.getName(), item.getPath(), item.getType(), item.getSha(), 
+                item.getSize(), item.getUrl(), item.getDownloadUrl()
+        );
+        
+        if (item.getChildren() != null) {
+            var childNodes = item.getChildren().stream()
+                    .map(this::mapToTreeNode)
+                    .toList();
+            node.setChildren(childNodes);
+        }
+        
+        return node;
     }
 }
