@@ -44,6 +44,26 @@ Retrieves repository tree structure using URL parameters.
 curl -X GET "http://localhost:8080/api/repository/tree?url=https://github.com/spring-projects/spring-boot&path=spring-boot-project&recursive=false"
 ```
 
+### 3. GET /api/repository/refineJavaClassesTree
+Retrieves repository tree structure filtered to show only Java class files (.java). Uses the same parameters and methods as the regular tree API but refines the result to include only Java files while maintaining all file properties including SHA.
+
+**Parameters:**
+- `url` (required): Repository URL
+- `token` (optional): Access token for private repositories
+- `branch` (optional): Branch name (defaults to default branch)
+- `recursive` (optional): Fetch tree recursively (default: false)
+
+**Example:**
+```bash
+curl -X GET "http://localhost:8080/api/repository/refineJavaClassesTree?url=https://github.com/spring-projects/spring-boot&recursive=1"
+```
+
+**Key Features:**
+- Filters out all non-Java files
+- Maintains directory structure (only shows directories that contain Java files)
+- Preserves all file properties including SHA, size, URLs
+- Ideal for analyzing Java project structure
+
 ## Response Format
 
 **Success Response:**
@@ -157,6 +177,16 @@ curl -X POST "http://localhost:8080/api/repository/tree" \
   }'
 ```
 
+### 6. Get Only Java Classes from Repository
+```bash
+curl -X GET "http://localhost:8080/api/repository/refineJavaClassesTree?url=https://github.com/spring-projects/spring-boot&recursive=1"
+```
+
+### 7. Get Java Classes from Specific Branch
+```bash
+curl -X GET "http://localhost:8080/api/repository/refineJavaClassesTree?url=https://github.com/spring-projects/spring-boot&branch=2.7.x&recursive=1"
+```
+
 ## Tree Item Types
 
 - **file**: Regular file
@@ -196,25 +226,31 @@ This tree structure API complements the existing repository APIs:
 1. **Repository Verification** (`/api/repository/verify`) - Verify repository exists and get basic info
 2. **Repository Branches** (`/api/repository/branches`) - Get list of branches
 3. **Repository Tree** (`/api/repository/tree`) - Get file/directory structure
+4. **Refined Java Classes Tree** (`/api/repository/refineJavaClassesTree`) - Get only Java class files structure
 
 Typical workflow:
 1. Verify repository accessibility
 2. Get available branches
 3. Fetch tree structure for specific branch/path
-4. Use tree information to navigate or process repository content
+4. Use refined Java classes tree for Java project analysis
+5. Use tree information to navigate or process repository content
 
 ## Testing
 
-Use the provided test script `test-repository-tree-api.bat` to test the API endpoints with various scenarios.
+Use the provided test scripts to test the API endpoints with various scenarios:
 
 ```bash
-# Run the test script
+# Test regular tree API
 ./test-repository-tree-api.bat
+
+# Test refined Java classes tree API
+./test-refined-java-tree-api.bat
 ```
 
-The test script includes examples for:
+The test scripts include examples for:
 - Root directory listing
 - Specific path listing
 - Recursive structure fetching
 - POST requests with JSON body
 - Branch-specific requests
+- Java classes filtering

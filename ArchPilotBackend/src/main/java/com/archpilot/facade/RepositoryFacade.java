@@ -1,5 +1,7 @@
 package com.archpilot.facade;
 
+import java.util.Map;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +24,9 @@ public class RepositoryFacade {
     
     @Autowired
     private RepositoryVerificationService repositoryVerificationService;
+    
+    @Autowired
+    private com.archpilot.service.ClassDiagramGeneratorService classDiagramGeneratorService;
     
     public Mono<ApiResponse<RepositoryInfo>> verifyRepository(RepositoryVerificationRequest request) {
         logger.info("Processing repository verification request: {}", request.getRepositoryUrl());
@@ -93,6 +98,31 @@ public class RepositoryFacade {
                 });
     }
     
+    public Mono<ApiResponse<Object>> generateClassDiagram(String repositoryUrl, String accessToken, 
+                                                         String branch, Boolean recursive) {
+        logger.info("Processing class diagram generation request: {}", repositoryUrl);
+        
+        return repositoryVerificationService
+                .getRepositoryTree(repositoryUrl, accessToken, branch, recursive)
+                .map(response -> {
+                    if ("Success".equals(response.getStatus())) {
+                        RepositoryTreeData treeData = mapToTreeData(response);
+                        RepositoryTreeData refinedTreeData = refineToJavaClasses(treeData);
+                        
+                        // Generate class diagram using the service
+                        Map<String, Object> diagramResult = classDiagramGeneratorService.generateClassDiagram(refinedTreeData);
+                        
+                        return ApiResponse.<Object>success("Class diagram generated successfully", diagramResult);
+                    } else {
+                        return ApiResponse.<Object>error(response.getMessage());
+                    }
+                })
+                .onErrorResume(ex -> {
+                    logger.error("Error in class diagram generation facade: {}", ex.getMessage());
+                    return Mono.just(ApiResponse.<Object>error("Internal server error: " + ex.getMessage()));
+                });
+    }
+    
     private RepositoryInfo mapToRepositoryInfo(com.archpilot.dto.RepositoryVerificationResponse response) {
         if (response.getRepositoryInfo() == null) {
             return null;
@@ -158,5 +188,72 @@ public class RepositoryFacade {
         }
         
         return node;
+    }
+    
+    private RepositoryTreeData refineToJavaClasses(RepositoryTreeData originalTreeData) {
+        if (originalTreeData == null || originalTreeData.getTree() == null) {
+            return originalTreeData;
+        }
+        
+        var refinedTree = originalTreeData.getTree().stream()
+                .map(this::filterJavaClassesFromNode)
+                .filter(node -> node != null)
+                .toList();
+        
+        return new RepositoryTreeData(
+                originalTreeData.getRepositoryUrl(),
+                originalTreeData.getBranch(),
+                refinedTree,
+                originalTreeData.getPlatform()
+        );
+    }
+    
+    private com.archpilot.model.TreeNode filterJavaClassesFromNode(com.archpilot.model.TreeNode node) {
+        if (node == null) {
+            return null;
+        }
+        
+        // If it's a file, check if it's a Java class file
+        if ("file".equals(node.getType())) {
+            if (node.getName() != null && node.getName().endsWith(".java")) {
+                // Return the Java file with all its properties including SHA
+                return new com.archpilot.model.TreeNode(
+                        node.getName(),
+                        node.getPath(),
+                        node.getType(),
+                        node.getSha(),
+                        node.getSize(),
+                        node.getUrl(),
+                        node.getDownloadUrl()
+                );
+            }
+            // Not a Java file, exclude it
+            return null;
+        }
+        
+        // If it's a directory, recursively filter its children
+        if ("dir".equals(node.getType()) && node.getChildren() != null) {
+            var filteredChildren = node.getChildren().stream()
+                    .map(this::filterJavaClassesFromNode)
+                    .filter(child -> child != null)
+                    .toList();
+            
+            // Only include the directory if it has Java files in it (directly or in subdirectories)
+            if (!filteredChildren.isEmpty()) {
+                com.archpilot.model.TreeNode dirNode = new com.archpilot.model.TreeNode(
+                        node.getName(),
+                        node.getPath(),
+                        node.getType(),
+                        node.getSha(),
+                        node.getSize(),
+                        node.getUrl(),
+                        node.getDownloadUrl()
+                );
+                dirNode.setChildren(filteredChildren);
+                return dirNode;
+            }
+        }
+        
+        return null;
     }
 }
