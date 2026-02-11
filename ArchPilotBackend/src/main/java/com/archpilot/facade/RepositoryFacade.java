@@ -6,7 +6,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.archpilot.dto.RepositoryBranchesRequest;
-import com.archpilot.dto.RepositoryTreeRequest;
 import com.archpilot.dto.RepositoryVerificationRequest;
 import com.archpilot.model.ApiResponse;
 import com.archpilot.model.RepositoryBranchesData;
@@ -73,12 +72,13 @@ public class RepositoryFacade {
         return getRepositoryBranches(request);
     }
     
-    public Mono<ApiResponse<RepositoryTreeData>> getRepositoryTree(RepositoryTreeRequest request) {
-        logger.info("Processing repository tree request: {}", request.getRepositoryUrl());
+    public Mono<ApiResponse<RepositoryTreeData>> getRepositoryTree(String repositoryUrl, String accessToken, 
+                                                                  String branch, Boolean recursive) {
+        logger.info("Processing repository tree request: {}", repositoryUrl);
         
+        System.out.println("\n\nFacade - Repository URL: " + repositoryUrl);
         return repositoryVerificationService
-                .getRepositoryTree(request.getRepositoryUrl(), request.getAccessToken(), 
-                                 request.getBranch(), request.getPath(), request.getRecursive())
+                .getRepositoryTree(repositoryUrl, accessToken, branch, recursive)
                 .map(response -> {
                     if ("Success".equals(response.getStatus())) {
                         RepositoryTreeData treeData = mapToTreeData(response);
@@ -91,15 +91,6 @@ public class RepositoryFacade {
                     logger.error("Error in repository tree facade: {}", ex.getMessage());
                     return Mono.just(ApiResponse.error("Internal server error: " + ex.getMessage()));
                 });
-    }
-    
-    public Mono<ApiResponse<RepositoryTreeData>> getRepositoryTree(String repositoryUrl, String accessToken, 
-                                                                  String branch, String path, Boolean recursive) {
-        RepositoryTreeRequest request = new RepositoryTreeRequest(repositoryUrl, accessToken);
-        request.setBranch(branch);
-        request.setPath(path);
-        request.setRecursive(recursive);
-        return getRepositoryTree(request);
     }
     
     private RepositoryInfo mapToRepositoryInfo(com.archpilot.dto.RepositoryVerificationResponse response) {
@@ -150,7 +141,7 @@ public class RepositoryFacade {
                 .toList();
         
         return new RepositoryTreeData(response.getRepositoryUrl(), response.getBranch(), 
-                                    response.getPath(), treeNodes, response.getPlatform());
+                                    treeNodes, response.getPlatform());
     }
     
     private com.archpilot.model.TreeNode mapToTreeNode(com.archpilot.dto.RepositoryTreeResponse.TreeItem item) {

@@ -7,7 +7,6 @@ public class RepositoryTreeResponse {
     private String message;
     private String repositoryUrl;
     private String branch;
-    private String path;
     private String platform;
     private List<TreeItem> tree;
     
@@ -18,12 +17,11 @@ public class RepositoryTreeResponse {
         this.message = message;
     }
     
-    public static RepositoryTreeResponse success(String repositoryUrl, String branch, String path, 
+    public static RepositoryTreeResponse success(String repositoryUrl, String branch, 
                                                List<TreeItem> tree, String platform) {
         RepositoryTreeResponse response = new RepositoryTreeResponse("Success", "Tree structure retrieved successfully");
         response.repositoryUrl = repositoryUrl;
         response.branch = branch;
-        response.path = path;
         response.tree = tree;
         response.platform = platform;
         return response;
@@ -45,9 +43,6 @@ public class RepositoryTreeResponse {
     
     public String getBranch() { return branch; }
     public void setBranch(String branch) { this.branch = branch; }
-    
-    public String getPath() { return path; }
-    public void setPath(String path) { this.path = path; }
     
     public String getPlatform() { return platform; }
     public void setPlatform(String platform) { this.platform = platform; }

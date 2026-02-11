@@ -16,8 +16,6 @@ public class RepositoryTreeRequest {
     
     private String branch; // Optional, defaults to default branch
     
-    private String path; // Optional, defaults to root directory
-    
     private Boolean recursive; // Optional, defaults to false (only immediate children)
     
     public RepositoryTreeRequest() {}
@@ -55,14 +53,6 @@ public class RepositoryTreeRequest {
         this.branch = branch;
     }
     
-    public String getPath() {
-        return path;
-    }
-    
-    public void setPath(String path) {
-        this.path = path;
-    }
-    
     public Boolean getRecursive() {
         return recursive;
     }
@@ -76,7 +66,6 @@ public class RepositoryTreeRequest {
         return "RepositoryTreeRequest{" +
                 "repositoryUrl='" + repositoryUrl + '\'' +
                 ", branch='" + branch + '\'' +
-                ", path='" + path + '\'' +
                 ", recursive=" + recursive +
                 ", hasAccessToken=" + (accessToken != null && !accessToken.isEmpty()) +
                 '}';
