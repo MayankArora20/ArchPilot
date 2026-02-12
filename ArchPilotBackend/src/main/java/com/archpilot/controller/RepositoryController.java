@@ -108,30 +108,5 @@ public class RepositoryController {
         return repositoryFacade.generateClassDiagram(repositoryUrl, accessToken, branch, recursive == 1).map(ResponseEntity::ok);
     }
     
-    @GetMapping("/health")
-    @Operation(summary = "Repository service health check", description = "Check if the repository verification service is operational")
-    public ResponseEntity<String> healthCheck() {
-        return ResponseEntity.ok("Repository verification service is operational");
-    }
-    
-    @GetMapping("/auth-help")
-    @Operation(summary = "GitHub authentication help", description = "Provides information on how to get GitHub access tokens")
-    public ResponseEntity<com.archpilot.model.ApiResponse<Object>> getAuthHelp() {
-        var helpInfo = java.util.Map.of(
-            "message", "GitHub API now requires authentication for most operations",
-            "howToGetToken", java.util.List.of(
-                "1. Go to GitHub.com and sign in",
-                "2. Click your profile picture → Settings",
-                "3. Scroll down to 'Developer settings'",
-                "4. Click 'Personal access tokens' → 'Tokens (classic)'",
-                "5. Click 'Generate new token (classic)'",
-                "6. Give it a name and select 'repo' scope for private repos, or 'public_repo' for public repos",
-                "7. Click 'Generate token' and copy the token",
-                "8. Use this token in the 'accessToken' field of your API requests"
-            ),
-            "note", "For public repositories, you can also try the verification endpoint which has fallback mechanisms"
-        );
-        
-        return ResponseEntity.ok(com.archpilot.model.ApiResponse.success("GitHub authentication help", helpInfo));
-    }
+
 }

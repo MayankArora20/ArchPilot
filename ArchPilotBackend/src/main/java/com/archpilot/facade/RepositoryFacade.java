@@ -13,6 +13,7 @@ import com.archpilot.model.ApiResponse;
 import com.archpilot.model.RepositoryBranchesData;
 import com.archpilot.model.RepositoryInfo;
 import com.archpilot.model.RepositoryTreeData;
+import com.archpilot.service.ClassDiagramGeneratorService;
 import com.archpilot.service.RepositoryVerificationService;
 
 import reactor.core.publisher.Mono;
@@ -26,7 +27,7 @@ public class RepositoryFacade {
     private RepositoryVerificationService repositoryVerificationService;
     
     @Autowired
-    private com.archpilot.service.ClassDiagramGeneratorService classDiagramGeneratorService;
+    private ClassDiagramGeneratorService classDiagramGeneratorService;
     
     public Mono<ApiResponse<RepositoryInfo>> verifyRepository(RepositoryVerificationRequest request) {
         logger.info("Processing repository verification request: {}", request.getRepositoryUrl());
@@ -80,8 +81,6 @@ public class RepositoryFacade {
     public Mono<ApiResponse<RepositoryTreeData>> getRepositoryTree(String repositoryUrl, String accessToken, 
                                                                   String branch, Boolean recursive) {
         logger.info("Processing repository tree request: {}", repositoryUrl);
-        
-        System.out.println("\n\nFacade - Repository URL: " + repositoryUrl);
         return repositoryVerificationService
                 .getRepositoryTree(repositoryUrl, accessToken, branch, recursive)
                 .map(response -> {
@@ -124,21 +123,7 @@ public class RepositoryFacade {
     }
     
     private RepositoryInfo mapToRepositoryInfo(com.archpilot.dto.RepositoryVerificationResponse response) {
-        if (response.getRepositoryInfo() == null) {
-            return null;
-        }
-        
-        var repoInfo = response.getRepositoryInfo();
-        return new RepositoryInfo(
-                repoInfo.getName(),
-                repoInfo.getFullName(),
-                repoInfo.getDescription(),
-                repoInfo.getDefaultBranch(),
-                repoInfo.isPrivate(),
-                repoInfo.getLanguage(),
-                repoInfo.getPlatform(),
-                response.getRepositoryUrl()
-        );
+        return response.getRepositoryInfo();
     }
     
     private RepositoryBranchesData mapToBranchesData(com.archpilot.dto.RepositoryBranchesResponse response) {
@@ -146,19 +131,7 @@ public class RepositoryFacade {
             return null;
         }
         
-        var branches = response.getBranches().stream()
-                .map(branch -> new com.archpilot.model.BranchInfo(
-                        branch.getName(),
-                        branch.getSha(),
-                        branch.isDefault(),
-                        branch.isProtected(),
-                        branch.getLastCommitMessage(),
-                        branch.getLastCommitAuthor(),
-                        branch.getLastCommitDate()
-                ))
-                .toList();
-        
-        return new RepositoryBranchesData(response.getRepositoryUrl(), branches, response.getPlatform());
+        return new RepositoryBranchesData(response.getRepositoryUrl(), response.getBranches(), response.getPlatform());
     }
     
     private RepositoryTreeData mapToTreeData(com.archpilot.dto.RepositoryTreeResponse response) {
@@ -166,46 +139,8 @@ public class RepositoryFacade {
             return null;
         }
         
-        var treeNodes = response.getTree().stream()
-                .map(this::mapToTreeNode)
-                .toList();
-        
         return new RepositoryTreeData(response.getRepositoryUrl(), response.getBranch(), 
-                                    treeNodes, response.getPlatform());
-    }
-    
-    private com.archpilot.model.TreeNode mapToTreeNode(com.archpilot.dto.RepositoryTreeResponse.TreeItem item) {
-        com.archpilot.model.TreeNode node = new com.archpilot.model.TreeNode(
-                item.getName(), item.getPath(), item.getType(), item.getSha(), 
-                item.getSize(), item.getUrl(), item.getDownloadUrl()
-        );
-        
-        if (item.getChildren() != null) {
-            var childNodes = item.getChildren().stream()
-                    .map(this::mapToTreeNode)
-                    .toList();
-            node.setChildren(childNodes);
-        }
-        
-        return node;
-    }
-    
-    private RepositoryTreeData refineToJavaClasses(RepositoryTreeData originalTreeData) {
-        if (originalTreeData == null || originalTreeData.getTree() == null) {
-            return originalTreeData;
-        }
-        
-        var refinedTree = originalTreeData.getTree().stream()
-                .map(this::filterJavaClassesFromNode)
-                .filter(node -> node != null)
-                .toList();
-        
-        return new RepositoryTreeData(
-                originalTreeData.getRepositoryUrl(),
-                originalTreeData.getBranch(),
-                refinedTree,
-                originalTreeData.getPlatform()
-        );
+                                    response.getTree(), response.getPlatform());
     }
     
     private com.archpilot.model.TreeNode filterJavaClassesFromNode(com.archpilot.model.TreeNode node) {
@@ -255,5 +190,23 @@ public class RepositoryFacade {
         }
         
         return null;
+    }
+    
+    private RepositoryTreeData refineToJavaClasses(RepositoryTreeData originalTreeData) {
+        if (originalTreeData == null || originalTreeData.getTree() == null) {
+            return originalTreeData;
+        }
+        
+        var refinedTree = originalTreeData.getTree().stream()
+                .map(this::filterJavaClassesFromNode)
+                .filter(node -> node != null)
+                .toList();
+        
+        return new RepositoryTreeData(
+                originalTreeData.getRepositoryUrl(),
+                originalTreeData.getBranch(),
+                refinedTree,
+                originalTreeData.getPlatform()
+        );
     }
 }

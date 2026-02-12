@@ -1,5 +1,6 @@
 package com.archpilot.service;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -110,21 +111,25 @@ public class RepositoryVerificationService {
                     try {
                         JsonNode jsonNode = objectMapper.readTree(responseBody);
                         
-                        RepositoryVerificationResponse.RepositoryInfo info = new RepositoryVerificationResponse.RepositoryInfo(
+                        com.archpilot.model.RepositoryInfo info = new com.archpilot.model.RepositoryInfo(
                                 jsonNode.path("name").asText(),
                                 jsonNode.path("full_name").asText(),
                                 jsonNode.path("description").asText("No description"),
                                 jsonNode.path("default_branch").asText("main"),
                                 jsonNode.path("private").asBoolean(false),
                                 jsonNode.path("language").asText("Unknown"),
-                                "GitHub"
+                                "GitHub",
+                                repositoryUrl
                         );
                         
                         logger.info("Successfully verified GitHub repository: {}", repositoryUrl);
                         return RepositoryVerificationResponse.verified(repositoryUrl, info);
                         
-                    } catch (Exception e) {
+                    } catch (IOException e) {
                         logger.error("Error parsing GitHub API response: {}", e.getMessage());
+                        return RepositoryVerificationResponse.error("Error parsing repository information");
+                    } catch (Exception e) {
+                        logger.error("Unexpected error parsing GitHub API response: {}", e.getMessage());
                         return RepositoryVerificationResponse.error("Error parsing repository information");
                     }
                 })
@@ -162,14 +167,15 @@ public class RepositoryVerificationService {
                 .bodyToMono(String.class)
                 .timeout(Duration.ofSeconds(10))
                 .map(responseBody -> {
-                    RepositoryVerificationResponse.RepositoryInfo info = new RepositoryVerificationResponse.RepositoryInfo(
+                    com.archpilot.model.RepositoryInfo info = new com.archpilot.model.RepositoryInfo(
                             repo,
                             owner + "/" + repo,
                             "Repository verified via web access (API authentication required for detailed info)",
                             "main",
                             false,
                             "Unknown",
-                            "GitHub"
+                            "GitHub",
+                            repositoryUrl
                     );
                     
                     logger.info("Successfully verified GitHub repository via web access: {}", repositoryUrl);
@@ -218,20 +224,24 @@ public class RepositoryVerificationService {
                     try {
                         JsonNode jsonNode = objectMapper.readTree(responseBody);
                         
-                        RepositoryVerificationResponse.RepositoryInfo info = new RepositoryVerificationResponse.RepositoryInfo(
+                        com.archpilot.model.RepositoryInfo info = new com.archpilot.model.RepositoryInfo(
                                 jsonNode.path("name").asText(),
                                 jsonNode.path("path_with_namespace").asText(),
                                 jsonNode.path("description").asText("No description"),
                                 jsonNode.path("default_branch").asText("main"),
                                 jsonNode.path("visibility").asText("public").equals("private"),
                                 "Unknown",
-                                "GitLab"
+                                "GitLab",
+                                repositoryUrl
                         );
                         
                         return RepositoryVerificationResponse.verified(repositoryUrl, info);
                         
-                    } catch (Exception e) {
+                    } catch (IOException e) {
                         logger.error("Error parsing GitLab API response: {}", e.getMessage());
+                        return RepositoryVerificationResponse.error("Error parsing repository information");
+                    } catch (Exception e) {
+                        logger.error("Unexpected error parsing GitLab API response: {}", e.getMessage());
                         return RepositoryVerificationResponse.error("Error parsing repository information");
                     }
                 })
@@ -315,14 +325,14 @@ public class RepositoryVerificationService {
     private RepositoryBranchesResponse parseGitHubBranchesResponse(String responseBody, String repositoryUrl) {
         try {
             JsonNode jsonArray = objectMapper.readTree(responseBody);
-            List<RepositoryBranchesResponse.BranchInfo> branches = new ArrayList<>();
+            List<com.archpilot.model.BranchInfo> branches = new ArrayList<>();
             
             for (JsonNode branchNode : jsonArray) {
                 String branchName = branchNode.path("name").asText();
                 String sha = branchNode.path("commit").path("sha").asText();
                 boolean isProtected = branchNode.path("protected").asBoolean(false);
                 
-                RepositoryBranchesResponse.BranchInfo branchInfo = new RepositoryBranchesResponse.BranchInfo(
+                com.archpilot.model.BranchInfo branchInfo = new com.archpilot.model.BranchInfo(
                         branchName, sha, false, isProtected, null, null, null
                 );
                 
@@ -332,8 +342,11 @@ public class RepositoryVerificationService {
             logger.info("Successfully fetched {} branches for GitHub repository: {}", branches.size(), repositoryUrl);
             return RepositoryBranchesResponse.success(repositoryUrl, branches, "GitHub");
             
-        } catch (Exception e) {
+        } catch (IOException e) {
             logger.error("Error parsing GitHub branches response: {}", e.getMessage());
+            return RepositoryBranchesResponse.error("Error parsing branches information");
+        } catch (Exception e) {
+            logger.error("Unexpected error parsing GitHub branches response: {}", e.getMessage());
             return RepositoryBranchesResponse.error("Error parsing branches information");
         }
     }
@@ -377,7 +390,7 @@ public class RepositoryVerificationService {
                 .map(responseBody -> {
                     try {
                         JsonNode jsonArray = objectMapper.readTree(responseBody);
-                        List<RepositoryBranchesResponse.BranchInfo> branches = new ArrayList<>();
+                        List<com.archpilot.model.BranchInfo> branches = new ArrayList<>();
                         
                         for (JsonNode branchNode : jsonArray) {
                             String branchName = branchNode.path("name").asText();
@@ -389,7 +402,7 @@ public class RepositoryVerificationService {
                             String commitMessage = commitNode.path("message").asText(null);
                             String commitAuthor = commitNode.path("author_name").asText(null);
                             
-                            RepositoryBranchesResponse.BranchInfo branchInfo = new RepositoryBranchesResponse.BranchInfo(
+                            com.archpilot.model.BranchInfo branchInfo = new com.archpilot.model.BranchInfo(
                                     branchName, sha, isDefault, isProtected, commitMessage, commitAuthor, null
                             );
                             
@@ -399,8 +412,11 @@ public class RepositoryVerificationService {
                         logger.info("Successfully fetched {} branches for GitLab repository: {}", branches.size(), repositoryUrl);
                         return RepositoryBranchesResponse.success(repositoryUrl, branches, "GitLab");
                         
-                    } catch (Exception e) {
+                    } catch (IOException e) {
                         logger.error("Error parsing GitLab branches response: {}", e.getMessage());
+                        return RepositoryBranchesResponse.error("Error parsing branches information");
+                    } catch (Exception e) {
+                        logger.error("Unexpected error parsing GitLab branches response: {}", e.getMessage());
                         return RepositoryBranchesResponse.error("Error parsing branches information");
                     }
                 })
@@ -436,10 +452,10 @@ public class RepositoryVerificationService {
             repositoryUrl = repositoryUrl.trim();
             
             if (isGitHubUrl(repositoryUrl)) {
-                System.out.println("\n\nFetching GitHub tree for URL: " + repositoryUrl);
+                logger.info("Fetching GitHub tree for URL: {}", repositoryUrl);
                 return fetchGitHubTree(repositoryUrl, accessToken, branch, recursive);
             } else {
-                System.out.println("Unsupported repository platform for tree fetching: " + repositoryUrl);
+                logger.warn("Unsupported repository platform for tree fetching: {}", repositoryUrl);
                 return Mono.just(RepositoryTreeResponse.error("Unsupported repository platform. Only GitHub is supported"));
             }
             
@@ -465,7 +481,7 @@ public class RepositoryVerificationService {
     private Mono<RepositoryTreeResponse> fetchGitHubTreeWithBranch(String repositoryUrl, String accessToken, 
                                                                   String owner, String repo, String branch, 
                                                                   Boolean recursive) {
-        System.out.println("Repository URL: " + repositoryUrl);
+        logger.debug("Processing GitHub tree request for repository URL: {}", repositoryUrl);
         
         // If no access token, try different approaches
         if (accessToken == null || accessToken.trim().isEmpty()) {
@@ -525,8 +541,11 @@ public class RepositoryVerificationService {
                                 .timeout(Duration.ofSeconds(15))
                                 .map(treeResponse -> parseGitTreesApiResponse(treeResponse, repositoryUrl, branch));
                         
-                    } catch (Exception e) {
+                    } catch (IOException e) {
                         logger.error("Error parsing branch response: {}", e.getMessage());
+                        return Mono.just(RepositoryTreeResponse.error("Error parsing branch information"));
+                    } catch (Exception e) {
+                        logger.error("Unexpected error parsing branch response: {}", e.getMessage());
                         return Mono.just(RepositoryTreeResponse.error("Error parsing branch information"));
                     }
                 })
@@ -574,7 +593,7 @@ public class RepositoryVerificationService {
         try {
             JsonNode jsonNode = objectMapper.readTree(responseBody);
             JsonNode treeArray = jsonNode.path("tree");
-            List<RepositoryTreeResponse.TreeItem> treeItems = new ArrayList<>();
+            List<com.archpilot.model.TreeNode> treeItems = new ArrayList<>();
             
             for (JsonNode itemNode : treeArray) {
                 String itemPath = itemNode.path("path").asText();
@@ -591,7 +610,7 @@ public class RepositoryVerificationService {
                     type = "file";
                 }
                 
-                RepositoryTreeResponse.TreeItem item = new RepositoryTreeResponse.TreeItem(
+                com.archpilot.model.TreeNode item = new com.archpilot.model.TreeNode(
                     name, itemPath, type, sha, size, url, null
                 );
                 
@@ -601,8 +620,11 @@ public class RepositoryVerificationService {
             logger.info("Successfully parsed {} tree items using Git Trees API for repository: {}", treeItems.size(), repositoryUrl);
             return RepositoryTreeResponse.success(repositoryUrl, branch, treeItems, "GitHub");
             
-        } catch (Exception e) {
+        } catch (IOException e) {
             logger.error("Error parsing Git Trees API response: {}", e.getMessage());
+            return RepositoryTreeResponse.error("Error parsing tree structure from Git Trees API");
+        } catch (Exception e) {
+            logger.error("Unexpected error parsing Git Trees API response: {}", e.getMessage());
             return RepositoryTreeResponse.error("Error parsing tree structure from Git Trees API");
         }
     }

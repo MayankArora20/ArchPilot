@@ -1,12 +1,5 @@
 package com.archpilot.service;
 
-import com.archpilot.model.RepositoryTreeData;
-import com.archpilot.model.TreeNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -14,7 +7,18 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import com.archpilot.model.RepositoryTreeData;
+import com.archpilot.model.TreeNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 public class ClassDiagramGeneratorService {
@@ -53,8 +57,13 @@ public class ClassDiagramGeneratorService {
             
             return response;
             
-        } catch (Exception e) {
+        } catch (IOException e) {
             logger.error("Error generating class diagram: {}", e.getMessage(), e);
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Failed to generate class diagram: " + e.getMessage());
+            return errorResponse;
+        } catch (Exception e) {
+            logger.error("Unexpected error generating class diagram: {}", e.getMessage(), e);
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("error", "Failed to generate class diagram: " + e.getMessage());
             return errorResponse;

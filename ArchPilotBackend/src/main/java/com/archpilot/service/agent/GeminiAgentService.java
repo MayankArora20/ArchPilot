@@ -1,4 +1,4 @@
-package com.archpilot.service;
+package com.archpilot.service.agent;
 
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
