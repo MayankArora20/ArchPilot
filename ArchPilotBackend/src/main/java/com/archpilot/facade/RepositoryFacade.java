@@ -109,7 +109,7 @@ public class RepositoryFacade {
                         RepositoryTreeData refinedTreeData = refineToJavaClasses(treeData);
                         
                         // Generate class diagram using the service
-                        Map<String, Object> diagramResult = classDiagramGeneratorService.generateClassDiagram(refinedTreeData);
+                        Map<String, Object> diagramResult = classDiagramGeneratorService.generateClassDiagram(refinedTreeData, accessToken, branch);
                         
                         return ApiResponse.<Object>success("Class diagram generated successfully", diagramResult);
                     } else {
