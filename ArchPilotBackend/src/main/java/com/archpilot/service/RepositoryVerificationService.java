@@ -618,7 +618,7 @@ public class RepositoryVerificationService {
             }
             
             logger.info("Successfully parsed {} tree items using Git Trees API for repository: {}", treeItems.size(), repositoryUrl);
-            return RepositoryTreeResponse.success(repositoryUrl, branch, treeItems, "GitHub");
+            return RepositoryTreeResponse.success(repositoryUrl, branch, treeItems, "GitHub", branch);
             
         } catch (IOException e) {
             logger.error("Error parsing Git Trees API response: {}", e.getMessage());

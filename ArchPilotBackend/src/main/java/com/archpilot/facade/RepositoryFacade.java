@@ -108,10 +108,11 @@ public class RepositoryFacade {
                         RepositoryTreeData treeData = mapToTreeData(response);
                         RepositoryTreeData refinedTreeData = refineToJavaClasses(treeData);
                         
-                        // Generate class diagram using the service
-                        Map<String, Object> diagramResult = classDiagramGeneratorService.generateClassDiagram(refinedTreeData);
+                        // Generate class diagram image using the new method
+                        com.archpilot.dto.ClassDiagramResponse diagramResult = 
+                            classDiagramGeneratorService.generateClassDiagramImage(refinedTreeData);
                         
-                        return ApiResponse.<Object>success("Class diagram generated successfully", diagramResult);
+                        return ApiResponse.<Object>success(diagramResult.getMessage(), diagramResult);
                     } else {
                         return ApiResponse.<Object>error(response.getMessage());
                     }

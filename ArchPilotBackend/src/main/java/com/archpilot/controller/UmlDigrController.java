@@ -26,9 +26,10 @@ public class UmlDigrController {
     private RepositoryFacade repositoryFacade;
     
     @GetMapping("/classDigrGenerator")
-    @Operation(summary = "Generate class diagram with PNG output", description = "Retrieves Java class files, generates PlantUML diagram, converts to PNG, and returns both PlantUML content and base64-encoded PNG data. Uses SHA-based caching to avoid regenerating unchanged projects.")
+    @Operation(summary = "Generate class diagram with PNG output and SHA-based caching", 
+               description = "Retrieves Java class files, generates PlantUML diagram, converts to PNG, and returns base64-encoded PNG data. Uses commit SHA-based caching to avoid regenerating unchanged projects - if an image already exists for the same commit SHA, returns the cached version instead of recreating it.")
     @ApiResponses(value = {
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Class diagram generation completed with PNG output"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Class diagram generation completed with PNG output (new or cached)"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Missing or invalid repository URL parameter")
     })
     public Mono<ResponseEntity<com.archpilot.model.ApiResponse<Object>>> generateClassDiagram(

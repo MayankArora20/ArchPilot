@@ -1,7 +1,5 @@
 package com.archpilot.service;
 
-import java.io.FileWriter;
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -18,20 +16,16 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.archpilot.dto.ClassDiagramResponse;
 import com.archpilot.model.RepositoryTreeData;
 import com.archpilot.model.TreeNode;
 import com.archpilot.service.agent.GeminiAgentService;
 import com.archpilot.service.agent.GeminiClassAnalyzerService;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 public class ClassDiagramGeneratorService {
     
     private static final Logger logger = LoggerFactory.getLogger(ClassDiagramGeneratorService.class);
-    private final ObjectMapper objectMapper = new ObjectMapper();
-    
-    @Autowired
-    private GeminiClassAnalyzerService geminiClassAnalyzerService;
     
     @Autowired
     private GeminiAgentService geminiAgentService;
@@ -39,11 +33,14 @@ public class ClassDiagramGeneratorService {
     @Autowired
     private PlantUmlToPngService plantUmlToPngService;
     
-    public Map<String, Object> generateClassDiagram(RepositoryTreeData treeData) {
-        logger.info("Generating enhanced class diagram for repository: {}", treeData.getRepositoryUrl());
+    /**
+     * Generate class diagram and return only PNG image data in the specified format
+     * Uses SHA-based caching to avoid regenerating unchanged projects
+     */
+    public ClassDiagramResponse generateClassDiagramImage(RepositoryTreeData treeData) {
+        logger.info("Generating class diagram image for repository: {}", treeData.getRepositoryUrl());
         
         try {
-            // Use the commit SHA from the tree data as the project SHA
             String projectSha = treeData.getCommitSha();
             String repositoryName = extractRepositoryName(treeData.getRepositoryUrl());
             
@@ -51,110 +48,248 @@ public class ClassDiagramGeneratorService {
                 logger.warn("No commit SHA available, proceeding without caching");
                 projectSha = "no-sha-" + System.currentTimeMillis();
             } else {
-                logger.info("Using commit SHA as project SHA: {} for repository: {}", projectSha, repositoryName);
+                logger.info("Using commit SHA for caching: {} for repository: {}", projectSha, repositoryName);
                 
-                // Check if we have a cached diagram for this exact project state
-                Map<String, Object> cachedDiagram = checkForCachedDiagram(repositoryName, projectSha);
-                if (cachedDiagram != null) {
-                    logger.info("Found existing diagram for project SHA: {}, returning cached result", projectSha);
-                    return cachedDiagram;
+                // Check if we have a cached image for this exact project state
+                ClassDiagramResponse cachedResponse = checkForCachedImage(repositoryName, projectSha);
+                if (cachedResponse != null) {
+                    logger.info("Found existing image for project SHA: {}, returning cached result", projectSha);
+                    return cachedResponse;
                 }
                 
-                logger.info("No cached diagram found for project SHA: {}, generating new diagram", projectSha);
+                logger.info("No cached image found for project SHA: {}, generating new image", projectSha);
             }
             
             // Make projectSha effectively final for lambda
             final String finalProjectSha = projectSha;
             
-            // Run the blocking operations in a separate thread to avoid reactive context issues
+            // Run the blocking operations in a separate thread
             return CompletableFuture.supplyAsync(() -> {
                 try {
-                    return generateClassDiagramBlocking(treeData, finalProjectSha);
+                    return generateClassDiagramImageBlocking(treeData, finalProjectSha);
                 } catch (Exception e) {
-                    logger.error("Error in async class diagram generation: {}", e.getMessage(), e);
-                    Map<String, Object> errorResponse = new HashMap<>();
-                    errorResponse.put("error", "Failed to generate enhanced class diagram: " + e.getMessage());
-                    return errorResponse;
+                    logger.error("Error in async class diagram image generation: {}", e.getMessage(), e);
+                    return ClassDiagramResponse.error("Failed to generate class diagram image: " + e.getMessage());
                 }
-            }).get(); // This will block but in a separate thread
+            }).get();
             
         } catch (Exception e) {
-            logger.error("Error generating enhanced class diagram: {}", e.getMessage(), e);
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("error", "Failed to generate enhanced class diagram: " + e.getMessage());
-            return errorResponse;
+            logger.error("Error generating class diagram image: {}", e.getMessage(), e);
+            return ClassDiagramResponse.error("Failed to generate class diagram image: " + e.getMessage());
         }
     }
     
-    private Map<String, Object> generateClassDiagramBlocking(RepositoryTreeData treeData, String projectSha) {
+    private ClassDiagramResponse generateClassDiagramImageBlocking(RepositoryTreeData treeData, String projectSha) {
         // Extract Java classes from tree data
         List<JavaClassInfo> javaClasses = extractJavaClasses(treeData);
         logger.info("Found {} Java classes to analyze", javaClasses.size());
         
-        // Generate basic PlantUML structure first
+        if (javaClasses.isEmpty()) {
+            return ClassDiagramResponse.error("No Java classes found in the repository");
+        }
+        
+        // Generate basic PlantUML structure
         String basicPlantUml = generateBasicPlantUML(javaClasses, treeData);
         logger.info("Generated basic PlantUML structure");
         
-        // Fetch file contents and analyze sequentially (no executor service)
+        // Fetch file contents and analyze with enhanced relationships
         Map<String, GeminiClassAnalyzerService.ClassAnalysisResult> analysisResults = 
             analyzeClassesSequentially(javaClasses, treeData, basicPlantUml);
-        logger.info("Completed sequential analysis for {} classes", analysisResults.size());
+        logger.info("Completed enhanced analysis for {} classes", analysisResults.size());
         
         // Generate enhanced PlantUML diagram with analysis results
         String enhancedPlantUml = generateEnhancedPlantUMLFromAnalysis(basicPlantUml, analysisResults, treeData);
         
-        // Generate enhanced JSON representation
-        Map<String, Object> jsonData = generateEnhancedJsonRepresentation(javaClasses, analysisResults, treeData);
-        
-        // Add project SHA to JSON data for caching
-        jsonData.put("projectSha", projectSha);
-        
-        // Create umlDigr directory and save files
-        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-        String repositoryName = extractRepositoryName(treeData.getRepositoryUrl());
-        
-        // Generate PNG from PlantUML
+        // Generate PNG from enhanced PlantUML
         String pngBase64 = null;
         try {
             pngBase64 = plantUmlToPngService.convertToPngBase64(enhancedPlantUml);
-            logger.info("Successfully generated PNG from PlantUML");
+            logger.info("Successfully generated PNG from enhanced PlantUML");
         } catch (Exception e) {
             logger.error("Error generating PNG from PlantUML: {}", e.getMessage(), e);
+            return ClassDiagramResponse.error("Failed to generate PNG from PlantUML: " + e.getMessage());
         }
         
+        // Create timestamp and filenames
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+        String repositoryName = extractRepositoryName(treeData.getRepositoryUrl());
+        String mainPngFileName = String.format("%s_%s.png", repositoryName, timestamp);
+        String litePngFileName = String.format("%s_%s_lite.png", repositoryName, timestamp);
+        
+        // Save PNG file to disk and metadata for caching
         try {
-            saveToFiles(enhancedPlantUml, jsonData, repositoryName, timestamp);
+            plantUmlToPngService.savePngToFile(enhancedPlantUml, mainPngFileName, "umlDigr");
+            logger.info("Saved PNG file: {}", mainPngFileName);
             
-            // Also save PNG file if generation was successful
-            if (pngBase64 != null) {
-                String pngFileName = String.format("%s_%s.png", repositoryName, timestamp);
-                plantUmlToPngService.savePngToFile(enhancedPlantUml, pngFileName, "umlDigr");
+            // Save metadata for caching
+            saveMetadata(repositoryName, timestamp, javaClasses.size(), projectSha);
+            
+        } catch (Exception e) {
+            logger.warn("Error saving PNG file or metadata: {}", e.getMessage());
+        }
+        
+        // Create response data
+        ClassDiagramResponse.ClassDiagramData data = new ClassDiagramResponse.ClassDiagramData(
+            mainPngFileName,
+            javaClasses.size(),
+            pngBase64,
+            repositoryName,
+            litePngFileName,
+            timestamp
+        );
+        
+        return ClassDiagramResponse.success("Class diagram generated successfully", data);
+    }
+    
+    /**
+     * Check for cached image by looking at existing PNG files in umlDigr directory
+     */
+    private ClassDiagramResponse checkForCachedImage(String repositoryName, String projectSha) {
+        try {
+            Path umlDigrPath = Paths.get("umlDigr");
+            if (!Files.exists(umlDigrPath)) {
+                return null;
             }
-        } catch (IOException e) {
-            logger.error("Error saving files: {}", e.getMessage(), e);
+            
+            // Look for PNG files matching the repository name pattern
+            return Files.list(umlDigrPath)
+                .filter(path -> path.toString().endsWith(".png"))
+                .filter(path -> path.getFileName().toString().startsWith(repositoryName + "_"))
+                .filter(path -> !path.getFileName().toString().contains("_lite.png")) // Skip lite versions
+                .map(pngFile -> {
+                    try {
+                        // Check if there's a corresponding metadata file with the same SHA
+                        String pngFileName = pngFile.getFileName().toString();
+                        String metadataFileName = pngFileName.replace(".png", "_metadata.txt");
+                        Path metadataFile = umlDigrPath.resolve(metadataFileName);
+                        
+                        if (Files.exists(metadataFile)) {
+                            String metadataContent = Files.readString(metadataFile);
+                            
+                            // Check if the project SHA matches
+                            if (metadataContent.contains("projectSha=" + projectSha)) {
+                                logger.info("Found matching cached image: {} with SHA: {}", pngFileName, projectSha);
+                                
+                                // Read the PNG file and convert to base64
+                                byte[] pngBytes = Files.readAllBytes(pngFile);
+                                String pngBase64 = java.util.Base64.getEncoder().encodeToString(pngBytes);
+                                
+                                // Extract information from metadata
+                                String repositoryNameFromFile = extractMetadataValue(metadataContent, "repositoryName");
+                                String timestampFromFile = extractMetadataValue(metadataContent, "timestamp");
+                                String classCountStr = extractMetadataValue(metadataContent, "classCount");
+                                int classCount = classCountStr != null ? Integer.parseInt(classCountStr) : 0;
+                                
+                                String litePngFileName = pngFileName.replace(".png", "_lite.png");
+                                
+                                // Create response data
+                                ClassDiagramResponse.ClassDiagramData data = new ClassDiagramResponse.ClassDiagramData(
+                                    pngFileName,
+                                    classCount,
+                                    pngBase64,
+                                    repositoryNameFromFile != null ? repositoryNameFromFile : repositoryName,
+                                    litePngFileName,
+                                    timestampFromFile
+                                );
+                                
+                                return ClassDiagramResponse.success("Class diagram retrieved from cache", data);
+                            }
+                        }
+                    } catch (Exception e) {
+                        logger.warn("Error reading cached file {}: {}", pngFile.getFileName(), e.getMessage());
+                    }
+                    return null;
+                })
+                .filter(result -> result != null)
+                .findFirst()
+                .orElse(null);
+                
+        } catch (Exception e) {
+            logger.error("Error checking for cached image: {}", e.getMessage());
+            return null;
         }
-        
-        // Return response
-        Map<String, Object> response = new HashMap<>();
-        response.put("plantUmlGenerated", true);
-        response.put("jsonGenerated", true);
-        response.put("pngGenerated", pngBase64 != null);
-        response.put("classCount", javaClasses.size());
-        response.put("analyzedCount", analysisResults.size());
-        response.put("timestamp", timestamp);
-        response.put("repositoryName", repositoryName);
-        response.put("plantUmlContent", enhancedPlantUml);
-        response.put("jsonData", jsonData);
-        response.put("analysisResults", analysisResults);
-        response.put("projectSha", projectSha);
-        response.put("cached", false);
-        
-        // Include PNG data in response
-        if (pngBase64 != null) {
-            response.put("pngBase64", pngBase64);
+    }
+    
+    /**
+     * Extract value from metadata content
+     */
+    private String extractMetadataValue(String metadataContent, String key) {
+        String[] lines = metadataContent.split("\n");
+        for (String line : lines) {
+            if (line.startsWith(key + "=")) {
+                return line.substring(key.length() + 1);
+            }
         }
-        
-        return response;
+        return null;
+    }
+    
+    /**
+     * Save metadata file alongside the PNG for caching purposes
+     */
+    private void saveMetadata(String repositoryName, String timestamp, int classCount, String projectSha) {
+        try {
+            Path umlDigrPath = Paths.get("umlDigr");
+            if (!Files.exists(umlDigrPath)) {
+                Files.createDirectories(umlDigrPath);
+            }
+            
+            String metadataFileName = String.format("%s_%s_metadata.txt", repositoryName, timestamp);
+            Path metadataFilePath = umlDigrPath.resolve(metadataFileName);
+            
+            String metadataContent = String.format(
+                "repositoryName=%s\n" +
+                "timestamp=%s\n" +
+                "classCount=%d\n" +
+                "projectSha=%s\n" +
+                "generatedAt=%s\n",
+                repositoryName,
+                timestamp,
+                classCount,
+                projectSha,
+                LocalDateTime.now().toString()
+            );
+            
+            Files.writeString(metadataFilePath, metadataContent);
+            logger.info("Saved metadata file: {}", metadataFileName);
+            
+        } catch (Exception e) {
+            logger.warn("Error saving metadata file: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * Clean up old cached files (optional maintenance method)
+     * Removes files older than 7 days to prevent disk space issues
+     */
+    public void cleanupOldCachedFiles() {
+        try {
+            Path umlDigrPath = Paths.get("umlDigr");
+            if (!Files.exists(umlDigrPath)) {
+                return;
+            }
+            
+            long sevenDaysAgo = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L);
+            
+            Files.list(umlDigrPath)
+                .filter(path -> {
+                    try {
+                        return Files.getLastModifiedTime(path).toMillis() < sevenDaysAgo;
+                    } catch (Exception e) {
+                        return false;
+                    }
+                })
+                .forEach(path -> {
+                    try {
+                        Files.delete(path);
+                        logger.info("Deleted old cached file: {}", path.getFileName());
+                    } catch (Exception e) {
+                        logger.warn("Error deleting old cached file {}: {}", path.getFileName(), e.getMessage());
+                    }
+                });
+                
+        } catch (Exception e) {
+            logger.error("Error during cache cleanup: {}", e.getMessage());
+        }
     }
     
     private List<JavaClassInfo> extractJavaClasses(RepositoryTreeData treeData) {
@@ -165,6 +300,49 @@ public class ClassDiagramGeneratorService {
         }
         
         return javaClasses;
+    }
+    
+    private void extractJavaClassesFromNodes(List<TreeNode> nodes, List<JavaClassInfo> javaClasses) {
+        for (TreeNode node : nodes) {
+            if ("file".equals(node.getType()) && node.getName().endsWith(".java")) {
+                JavaClassInfo classInfo = new JavaClassInfo();
+                classInfo.setClassName(extractClassName(node.getName()));
+                classInfo.setFullPath(node.getPath());
+                classInfo.setPackageName(extractPackageName(node.getPath()));
+                classInfo.setSha(node.getSha());
+                classInfo.setSize(node.getSize());
+                classInfo.setUrl(node.getUrl());
+                classInfo.setDownloadUrl(node.getDownloadUrl());
+                
+                javaClasses.add(classInfo);
+            }
+            
+            if (node.getChildren() != null) {
+                extractJavaClassesFromNodes(node.getChildren(), javaClasses);
+            }
+        }
+    }
+    
+    private String extractClassName(String fileName) {
+        return fileName.replace(".java", "");
+    }
+    
+    private String extractPackageName(String filePath) {
+        // Extract package name from file path
+        // Example: src/main/java/com/archpilot/service/MyClass.java -> com.archpilot.service
+        String[] pathParts = filePath.split("/");
+        List<String> packageParts = new ArrayList<>();
+        
+        boolean foundJava = false;
+        for (String part : pathParts) {
+            if (foundJava && !part.endsWith(".java")) {
+                packageParts.add(part);
+            } else if ("java".equals(part)) {
+                foundJava = true;
+            }
+        }
+        
+        return String.join(".", packageParts);
     }
     
     private String generateBasicPlantUML(List<JavaClassInfo> javaClasses, RepositoryTreeData treeData) {
@@ -210,6 +388,16 @@ public class ClassDiagramGeneratorService {
         return plantUml.toString();
     }
     
+    private String extractRepositoryName(String repositoryUrl) {
+        // Extract repository name from URL
+        // Example: https://github.com/owner/repo -> repo
+        String[] parts = repositoryUrl.split("/");
+        return parts[parts.length - 1];
+    }
+    
+    /**
+     * Analyze classes sequentially with enhanced relationship detection
+     */
     private Map<String, GeminiClassAnalyzerService.ClassAnalysisResult> analyzeClassesSequentially(
             List<JavaClassInfo> javaClasses, RepositoryTreeData treeData, String basicPlantUml) {
         
@@ -254,6 +442,9 @@ public class ClassDiagramGeneratorService {
         return analysisResults;
     }
     
+    /**
+     * Fetch single file content from GitHub raw URL
+     */
     private String fetchSingleFileContentFromGitHub(JavaClassInfo javaClass, RepositoryTreeData treeData) {
         try {
             // Construct raw GitHub URL from repository URL and file path
@@ -283,6 +474,9 @@ public class ClassDiagramGeneratorService {
         }
     }
     
+    /**
+     * Construct raw GitHub URL for file content
+     */
     private String constructRawGitHubUrl(String repositoryUrl, String branch, String filePath) {
         try {
             // Convert https://github.com/owner/repo to https://raw.githubusercontent.com/owner/repo/branch/path
@@ -306,19 +500,22 @@ public class ClassDiagramGeneratorService {
         return null;
     }
     
+    /**
+     * Analyze class with enhanced context for relationships
+     */
     private GeminiClassAnalyzerService.ClassAnalysisResult analyzeClassWithContext(
             String className, String content, String existingUml) {
         
-        logger.info("Starting Gemini analysis for class: {}", className);
+        logger.info("Starting enhanced Gemini analysis for class: {}", className);
         
         String prompt = String.format("""
-            I have a basic PlantUML class diagram that I want to enhance. Here's the current UML:
+            I have a basic PlantUML class diagram that I want to enhance with detailed class analysis. Here's the current UML:
             
             ```plantuml
             %s
             ```
             
-            Now I want to analyze this Java class and extract detailed information to enhance the diagram:
+            Now I want to analyze this Java class and extract detailed information including relationships, methods, and fields:
             
             Class Name: %s
             
@@ -358,7 +555,7 @@ public class ClassDiagramGeneratorService {
                         ]
                     }
                 ],
-                "usedClasses": ["list of other classes this class references"],
+                "usedClasses": ["list of other classes this class references or uses"],
                 "annotations": ["list of class-level annotations"]
             }
             
@@ -367,10 +564,11 @@ public class ClassDiagramGeneratorService {
             2. All method signatures with parameters and return types
             3. Class relationships (extends, implements)
             4. Other classes that this class uses or references
+            5. Annotations and modifiers
             """, existingUml, className, content, className);
         
         try {
-            logger.info("Sending prompt to Gemini for class: {}", className);
+            logger.info("Sending enhanced prompt to Gemini for class: {}", className);
             String response = geminiAgentService.askQuestion(prompt);
             logger.info("Received response from Gemini for class: {} (length: {})", className, response != null ? response.length() : 0);
             
@@ -386,6 +584,9 @@ public class ClassDiagramGeneratorService {
         }
     }
     
+    /**
+     * Parse Gemini response into structured result
+     */
     private GeminiClassAnalyzerService.ClassAnalysisResult parseGeminiResponse(String className, String response) {
         try {
             // Extract JSON from response
@@ -397,6 +598,9 @@ public class ClassDiagramGeneratorService {
         }
     }
     
+    /**
+     * Extract JSON block from Gemini response
+     */
     private String extractJsonFromResponse(String response) {
         // Find JSON block in the response
         int jsonStart = response.indexOf("{");
@@ -409,6 +613,9 @@ public class ClassDiagramGeneratorService {
         return response; // Return as-is if no clear JSON block found
     }
     
+    /**
+     * Parse JSON to ClassAnalysisResult
+     */
     private GeminiClassAnalyzerService.ClassAnalysisResult parseJsonToClassAnalysisResult(String json) {
         GeminiClassAnalyzerService.ClassAnalysisResult result = new GeminiClassAnalyzerService.ClassAnalysisResult();
         
@@ -428,6 +635,9 @@ public class ClassDiagramGeneratorService {
         return result;
     }
     
+    /**
+     * Extract value from JSON string
+     */
     private String extractJsonValue(String json, String key) {
         String pattern = "\"" + key + "\"\\s*:\\s*\"([^\"]+)\"";
         java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern);
@@ -440,6 +650,9 @@ public class ClassDiagramGeneratorService {
         return null;
     }
     
+    /**
+     * Create fallback result for failed analysis
+     */
     private GeminiClassAnalyzerService.ClassAnalysisResult createFallbackResult(String className) {
         GeminiClassAnalyzerService.ClassAnalysisResult result = new GeminiClassAnalyzerService.ClassAnalysisResult();
         result.setClassName(className);
@@ -448,6 +661,9 @@ public class ClassDiagramGeneratorService {
         return result;
     }
     
+    /**
+     * Generate enhanced PlantUML from analysis results with relationships
+     */
     private String generateEnhancedPlantUMLFromAnalysis(String basicPlantUml, 
                                                        Map<String, GeminiClassAnalyzerService.ClassAnalysisResult> analysisResults,
                                                        RepositoryTreeData treeData) {
@@ -505,6 +721,9 @@ public class ClassDiagramGeneratorService {
         return enhanced.toString();
     }
     
+    /**
+     * Generate detailed class definition with fields and methods
+     */
     private void generateDetailedClassDefinition(StringBuilder plantUml, GeminiClassAnalyzerService.ClassAnalysisResult analysis) {
         String classType = analysis.getClassType() != null ? analysis.getClassType() : "class";
         String className = analysis.getClassName();
@@ -532,6 +751,9 @@ public class ClassDiagramGeneratorService {
         plantUml.append("  }\n");
     }
     
+    /**
+     * Add fields from raw analysis JSON
+     */
     private void addFieldsFromRawAnalysis(StringBuilder plantUml, String rawAnalysis) {
         if (rawAnalysis == null) return;
         
@@ -572,6 +794,9 @@ public class ClassDiagramGeneratorService {
         }
     }
     
+    /**
+     * Add methods from raw analysis JSON
+     */
     private void addMethodsFromRawAnalysis(StringBuilder plantUml, String rawAnalysis) {
         if (rawAnalysis == null) return;
         
@@ -613,6 +838,9 @@ public class ClassDiagramGeneratorService {
         }
     }
     
+    /**
+     * Extract JSON section by key
+     */
     private String extractJsonSection(String json, String sectionName) {
         try {
             String pattern = "\"" + sectionName + "\"\\s*:\\s*\\[([^\\]]+)\\]";
@@ -628,6 +856,9 @@ public class ClassDiagramGeneratorService {
         return null;
     }
     
+    /**
+     * Generate class relationships from analysis results
+     */
     private void generateClassRelationshipsFromAnalysis(StringBuilder plantUml, 
                                                        Map<String, GeminiClassAnalyzerService.ClassAnalysisResult> analysisResults) {
         plantUml.append("\n' Class Relationships\n");
@@ -657,390 +888,6 @@ public class ClassDiagramGeneratorService {
                     }
                 }
             }
-        }
-    }
-    
-    private void extractJavaClassesFromNodes(List<TreeNode> nodes, List<JavaClassInfo> javaClasses) {
-        for (TreeNode node : nodes) {
-            if ("file".equals(node.getType()) && node.getName().endsWith(".java")) {
-                JavaClassInfo classInfo = new JavaClassInfo();
-                classInfo.setClassName(extractClassName(node.getName()));
-                classInfo.setFullPath(node.getPath());
-                classInfo.setPackageName(extractPackageName(node.getPath()));
-                classInfo.setSha(node.getSha());
-                classInfo.setSize(node.getSize());
-                classInfo.setUrl(node.getUrl());
-                classInfo.setDownloadUrl(node.getDownloadUrl());
-                
-                javaClasses.add(classInfo);
-            }
-            
-            if (node.getChildren() != null) {
-                extractJavaClassesFromNodes(node.getChildren(), javaClasses);
-            }
-        }
-    }
-    
-    private String extractClassName(String fileName) {
-        return fileName.replace(".java", "");
-    }
-    
-    private String extractPackageName(String filePath) {
-        // Extract package name from file path
-        // Example: src/main/java/com/archpilot/service/MyClass.java -> com.archpilot.service
-        String[] pathParts = filePath.split("/");
-        List<String> packageParts = new ArrayList<>();
-        
-        boolean foundJava = false;
-        for (String part : pathParts) {
-            if (foundJava && !part.endsWith(".java")) {
-                packageParts.add(part);
-            } else if ("java".equals(part)) {
-                foundJava = true;
-            }
-        }
-        
-        return String.join(".", packageParts);
-    }
-    
-    private String generateEnhancedPlantUML(List<JavaClassInfo> javaClasses, 
-                                           Map<String, GeminiClassAnalyzerService.ClassAnalysisResult> analysisResults,
-                                           RepositoryTreeData treeData) {
-        StringBuilder plantUml = new StringBuilder();
-        
-        plantUml.append("@startuml\n");
-        plantUml.append("!theme plain\n");
-        plantUml.append("title Enhanced Class Diagram - ").append(extractRepositoryName(treeData.getRepositoryUrl())).append("\n\n");
-        
-        // Group classes by package
-        Map<String, List<JavaClassInfo>> packageGroups = new HashMap<>();
-        for (JavaClassInfo classInfo : javaClasses) {
-            String packageName = classInfo.getPackageName();
-            if (packageName.isEmpty()) {
-                packageName = "default";
-            }
-            packageGroups.computeIfAbsent(packageName, k -> new ArrayList<>()).add(classInfo);
-        }
-        
-        // Generate PlantUML for each package with enhanced details
-        for (Map.Entry<String, List<JavaClassInfo>> entry : packageGroups.entrySet()) {
-            String packageName = entry.getKey();
-            List<JavaClassInfo> classes = entry.getValue();
-            
-            if (!"default".equals(packageName)) {
-                plantUml.append("package \"").append(packageName).append("\" {\n");
-            }
-            
-            for (JavaClassInfo classInfo : classes) {
-                GeminiClassAnalyzerService.ClassAnalysisResult analysis = analysisResults.get(classInfo.getClassName());
-                
-                if (analysis != null && "SUCCESS".equals(analysis.getAnalysisStatus())) {
-                    generateEnhancedClassDefinition(plantUml, classInfo, analysis);
-                } else {
-                    // Fallback to basic class definition
-                    generateBasicClassDefinition(plantUml, classInfo);
-                }
-            }
-            
-            if (!"default".equals(packageName)) {
-                plantUml.append("}\n\n");
-            }
-        }
-        
-        // Generate relationships between classes
-        generateClassRelationships(plantUml, analysisResults);
-        
-        plantUml.append("@enduml\n");
-        
-        return plantUml.toString();
-    }
-    
-    private void generateEnhancedClassDefinition(StringBuilder plantUml, JavaClassInfo classInfo, 
-                                               GeminiClassAnalyzerService.ClassAnalysisResult analysis) {
-        String classType = analysis.getClassType() != null ? analysis.getClassType() : "class";
-        
-        if ("interface".equals(classType)) {
-            plantUml.append("  interface ").append(classInfo.getClassName()).append(" {\n");
-        } else if ("abstract class".equals(classType)) {
-            plantUml.append("  abstract class ").append(classInfo.getClassName()).append(" {\n");
-        } else if ("enum".equals(classType)) {
-            plantUml.append("  enum ").append(classInfo.getClassName()).append(" {\n");
-        } else {
-            plantUml.append("  class ").append(classInfo.getClassName()).append(" {\n");
-        }
-        
-        // Add fields from analysis
-        if (analysis.getFields() != null) {
-            for (GeminiClassAnalyzerService.FieldInfo field : analysis.getFields()) {
-                plantUml.append("    ");
-                if ("private".equals(field.getVisibility())) plantUml.append("-");
-                else if ("protected".equals(field.getVisibility())) plantUml.append("#");
-                else if ("public".equals(field.getVisibility())) plantUml.append("+");
-                else plantUml.append("~");
-                
-                plantUml.append(field.getName()).append(" : ").append(field.getType());
-                if (field.isStatic()) plantUml.append(" {static}");
-                if (field.isFinal()) plantUml.append(" {final}");
-                plantUml.append("\n");
-            }
-        }
-        
-        // Add separator between fields and methods
-        if (analysis.getFields() != null && !analysis.getFields().isEmpty() && 
-            analysis.getMethods() != null && !analysis.getMethods().isEmpty()) {
-            plantUml.append("    --\n");
-        }
-        
-        // Add methods from analysis
-        if (analysis.getMethods() != null) {
-            for (GeminiClassAnalyzerService.MethodInfo method : analysis.getMethods()) {
-                plantUml.append("    ");
-                if ("private".equals(method.getVisibility())) plantUml.append("-");
-                else if ("protected".equals(method.getVisibility())) plantUml.append("#");
-                else if ("public".equals(method.getVisibility())) plantUml.append("+");
-                else plantUml.append("~");
-                
-                plantUml.append(method.getName()).append("(");
-                
-                // Add parameters
-                if (method.getParameters() != null) {
-                    for (int i = 0; i < method.getParameters().size(); i++) {
-                        if (i > 0) plantUml.append(", ");
-                        GeminiClassAnalyzerService.ParameterInfo param = method.getParameters().get(i);
-                        plantUml.append(param.getName()).append(": ").append(param.getType());
-                    }
-                }
-                
-                plantUml.append(") : ").append(method.getReturnType());
-                if (method.isStatic()) plantUml.append(" {static}");
-                if (method.isAbstract()) plantUml.append(" {abstract}");
-                plantUml.append("\n");
-            }
-        }
-        
-        // Add metadata as comments
-        plantUml.append("    ' SHA: ").append(classInfo.getSha()).append("\n");
-        plantUml.append("    ' Path: ").append(classInfo.getFullPath()).append("\n");
-        plantUml.append("  }\n");
-    }
-    
-    private void generateBasicClassDefinition(StringBuilder plantUml, JavaClassInfo classInfo) {
-        plantUml.append("  class ").append(classInfo.getClassName()).append(" {\n");
-        plantUml.append("    ' SHA: ").append(classInfo.getSha()).append("\n");
-        plantUml.append("    ' Path: ").append(classInfo.getFullPath()).append("\n");
-        plantUml.append("    ' Analysis: FAILED - Using basic definition\n");
-        plantUml.append("  }\n");
-    }
-    
-    private void generateClassRelationships(StringBuilder plantUml, 
-                                          Map<String, GeminiClassAnalyzerService.ClassAnalysisResult> analysisResults) {
-        plantUml.append("\n' Class Relationships\n");
-        
-        for (GeminiClassAnalyzerService.ClassAnalysisResult analysis : analysisResults.values()) {
-            if (analysis == null || !"SUCCESS".equals(analysis.getAnalysisStatus())) continue;
-            
-            String className = analysis.getClassName();
-            
-            // Inheritance relationships
-            if (analysis.getExtendsClass() != null && !analysis.getExtendsClass().isEmpty()) {
-                plantUml.append(analysis.getExtendsClass()).append(" <|-- ").append(className).append("\n");
-            }
-            
-            // Interface implementations
-            if (analysis.getImplementsInterfaces() != null) {
-                for (String interfaceName : analysis.getImplementsInterfaces()) {
-                    plantUml.append(interfaceName).append(" <|.. ").append(className).append("\n");
-                }
-            }
-            
-            // Usage relationships (based on used classes)
-            if (analysis.getUsedClasses() != null) {
-                for (String usedClass : analysis.getUsedClasses()) {
-                    // Only show relationships to classes that are in our analysis
-                    if (analysisResults.containsKey(usedClass)) {
-                        plantUml.append(className).append(" --> ").append(usedClass).append(" : uses\n");
-                    }
-                }
-            }
-        }
-    }
-    
-    private Map<String, Object> generateEnhancedJsonRepresentation(List<JavaClassInfo> javaClasses, 
-                                                                 Map<String, GeminiClassAnalyzerService.ClassAnalysisResult> analysisResults,
-                                                                 RepositoryTreeData treeData) {
-        Map<String, Object> jsonData = new HashMap<>();
-        
-        jsonData.put("repositoryUrl", treeData.getRepositoryUrl());
-        jsonData.put("branch", treeData.getBranch());
-        jsonData.put("platform", treeData.getPlatform());
-        jsonData.put("generatedAt", LocalDateTime.now().toString());
-        jsonData.put("totalClasses", javaClasses.size());
-        jsonData.put("analyzedClasses", analysisResults.size());
-        jsonData.put("enhancedAnalysis", true);
-        jsonData.put("pngGenerated", true);  // Indicate PNG was generated
-        
-        // Group by packages with enhanced analysis
-        Map<String, List<Map<String, Object>>> packages = new HashMap<>();
-        
-        for (JavaClassInfo classInfo : javaClasses) {
-            String packageName = classInfo.getPackageName();
-            if (packageName.isEmpty()) {
-                packageName = "default";
-            }
-            
-            Map<String, Object> classData = new HashMap<>();
-            classData.put("className", classInfo.getClassName());
-            classData.put("fullPath", classInfo.getFullPath());
-            classData.put("sha", classInfo.getSha());
-            classData.put("size", classInfo.getSize());
-            classData.put("url", classInfo.getUrl());
-            classData.put("downloadUrl", classInfo.getDownloadUrl());
-            
-            // Add enhanced analysis data if available
-            GeminiClassAnalyzerService.ClassAnalysisResult analysis = analysisResults.get(classInfo.getClassName());
-            if (analysis != null) {
-                classData.put("analysisStatus", analysis.getAnalysisStatus());
-                classData.put("classType", analysis.getClassType());
-                classData.put("extendsClass", analysis.getExtendsClass());
-                classData.put("implementsInterfaces", analysis.getImplementsInterfaces());
-                classData.put("fields", analysis.getFields());
-                classData.put("methods", analysis.getMethods());
-                classData.put("usedClasses", analysis.getUsedClasses());
-                classData.put("annotations", analysis.getAnnotations());
-                classData.put("rawAnalysis", analysis.getRawAnalysis());
-            } else {
-                classData.put("analysisStatus", "NOT_ANALYZED");
-            }
-            
-            packages.computeIfAbsent(packageName, k -> new ArrayList<>()).add(classData);
-        }
-        
-        jsonData.put("packages", packages);
-        
-        // Add relationship summary
-        Map<String, Object> relationships = new HashMap<>();
-        int inheritanceCount = 0;
-        int implementationCount = 0;
-        int usageCount = 0;
-        
-        for (GeminiClassAnalyzerService.ClassAnalysisResult analysis : analysisResults.values()) {
-            if (analysis != null && "SUCCESS".equals(analysis.getAnalysisStatus())) {
-                if (analysis.getExtendsClass() != null && !analysis.getExtendsClass().isEmpty()) {
-                    inheritanceCount++;
-                }
-                if (analysis.getImplementsInterfaces() != null) {
-                    implementationCount += analysis.getImplementsInterfaces().size();
-                }
-                if (analysis.getUsedClasses() != null) {
-                    usageCount += analysis.getUsedClasses().size();
-                }
-            }
-        }
-        
-        relationships.put("inheritanceRelationships", inheritanceCount);
-        relationships.put("interfaceImplementations", implementationCount);
-        relationships.put("usageRelationships", usageCount);
-        jsonData.put("relationshipSummary", relationships);
-        
-        return jsonData;
-    }
-    
-    private String extractRepositoryName(String repositoryUrl) {
-        // Extract repository name from URL
-        // Example: https://github.com/owner/repo -> repo
-        String[] parts = repositoryUrl.split("/");
-        return parts[parts.length - 1];
-    }
-    
-    private void saveToFiles(String plantUmlContent, Map<String, Object> jsonData, 
-                           String repositoryName, String timestamp) throws IOException {
-        
-        // Create umlDigr directory parallel to resources
-        Path umlDigrPath = Paths.get("umlDigr");
-        if (!Files.exists(umlDigrPath)) {
-            Files.createDirectories(umlDigrPath);
-        }
-        
-        // Save PlantUML file
-        String plantUmlFileName = String.format("%s_%s.puml", repositoryName, timestamp);
-        Path plantUmlFilePath = umlDigrPath.resolve(plantUmlFileName);
-        
-        try (FileWriter writer = new FileWriter(plantUmlFilePath.toFile())) {
-            writer.write(plantUmlContent);
-        }
-        
-        // Save JSON file
-        String jsonFileName = String.format("%s_%s.json", repositoryName, timestamp);
-        Path jsonFilePath = umlDigrPath.resolve(jsonFileName);
-        
-        objectMapper.writerWithDefaultPrettyPrinter().writeValue(jsonFilePath.toFile(), jsonData);
-        
-        logger.info("Files saved: {} and {}", plantUmlFileName, jsonFileName);
-    }
-    
-    /**
-     * Check for cached diagram by looking at existing JSON files in umlDigr directory
-     */
-    private Map<String, Object> checkForCachedDiagram(String repositoryName, String projectSha) {
-        try {
-            Path umlDigrPath = Paths.get("umlDigr");
-            if (!Files.exists(umlDigrPath)) {
-                return null;
-            }
-            
-            // Look for JSON files matching the repository name pattern
-            return Files.list(umlDigrPath)
-                .filter(path -> path.toString().endsWith(".json"))
-                .filter(path -> path.getFileName().toString().startsWith(repositoryName + "_"))
-                .map(jsonFile -> {
-                    try {
-                        // Read and parse the JSON file
-                        String jsonContent = Files.readString(jsonFile);
-                        Map<String, Object> jsonData = objectMapper.readValue(jsonContent, Map.class);
-                        
-                        // Check if the project SHA matches
-                        String cachedSha = (String) jsonData.get("projectSha");
-                        if (projectSha.equals(cachedSha)) {
-                            logger.info("Found matching cached diagram: {} with SHA: {}", jsonFile.getFileName(), cachedSha);
-                            
-                            // Also try to read the corresponding PlantUML file
-                            String pumlFileName = jsonFile.getFileName().toString().replace(".json", ".puml");
-                            Path pumlFile = umlDigrPath.resolve(pumlFileName);
-                            
-                            if (Files.exists(pumlFile)) {
-                                String plantUmlContent = Files.readString(pumlFile);
-                                jsonData.put("plantUmlContent", plantUmlContent);
-                                
-                                // Generate PNG from cached PlantUML content
-                                try {
-                                    String pngBase64 = plantUmlToPngService.convertToPngBase64(plantUmlContent);
-                                    jsonData.put("pngBase64", pngBase64);
-                                    jsonData.put("pngGenerated", true);
-                                    logger.info("Generated PNG from cached PlantUML content");
-                                } catch (Exception e) {
-                                    logger.warn("Error generating PNG from cached PlantUML: {}", e.getMessage());
-                                    jsonData.put("pngGenerated", false);
-                                }
-                            }
-                            
-                            // Mark as cached and return
-                            jsonData.put("cached", true);
-                            jsonData.put("cachedFile", jsonFile.getFileName().toString());
-                            
-                            return jsonData;
-                        }
-                    } catch (Exception e) {
-                        logger.warn("Error reading cached file {}: {}", jsonFile.getFileName(), e.getMessage());
-                    }
-                    return null;
-                })
-                .filter(result -> result != null)
-                .findFirst()
-                .orElse(null);
-                
-        } catch (Exception e) {
-            logger.error("Error checking for cached diagram: {}", e.getMessage());
-            return null;
         }
     }
     
