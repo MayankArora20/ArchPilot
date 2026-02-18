@@ -36,14 +36,40 @@ public class ClassDiagramGeneratorService {
     @Autowired
     private GeminiAgentService geminiAgentService;
     
+    @Autowired
+    private PlantUmlToPngService plantUmlToPngService;
+    
     public Map<String, Object> generateClassDiagram(RepositoryTreeData treeData) {
         logger.info("Generating enhanced class diagram for repository: {}", treeData.getRepositoryUrl());
         
         try {
+            // Use the commit SHA from the tree data as the project SHA
+            String projectSha = treeData.getCommitSha();
+            String repositoryName = extractRepositoryName(treeData.getRepositoryUrl());
+            
+            if (projectSha == null || projectSha.isEmpty()) {
+                logger.warn("No commit SHA available, proceeding without caching");
+                projectSha = "no-sha-" + System.currentTimeMillis();
+            } else {
+                logger.info("Using commit SHA as project SHA: {} for repository: {}", projectSha, repositoryName);
+                
+                // Check if we have a cached diagram for this exact project state
+                Map<String, Object> cachedDiagram = checkForCachedDiagram(repositoryName, projectSha);
+                if (cachedDiagram != null) {
+                    logger.info("Found existing diagram for project SHA: {}, returning cached result", projectSha);
+                    return cachedDiagram;
+                }
+                
+                logger.info("No cached diagram found for project SHA: {}, generating new diagram", projectSha);
+            }
+            
+            // Make projectSha effectively final for lambda
+            final String finalProjectSha = projectSha;
+            
             // Run the blocking operations in a separate thread to avoid reactive context issues
             return CompletableFuture.supplyAsync(() -> {
                 try {
-                    return generateClassDiagramBlocking(treeData);
+                    return generateClassDiagramBlocking(treeData, finalProjectSha);
                 } catch (Exception e) {
                     logger.error("Error in async class diagram generation: {}", e.getMessage(), e);
                     Map<String, Object> errorResponse = new HashMap<>();
@@ -60,7 +86,7 @@ public class ClassDiagramGeneratorService {
         }
     }
     
-    private Map<String, Object> generateClassDiagramBlocking(RepositoryTreeData treeData) {
+    private Map<String, Object> generateClassDiagramBlocking(RepositoryTreeData treeData, String projectSha) {
         // Extract Java classes from tree data
         List<JavaClassInfo> javaClasses = extractJavaClasses(treeData);
         logger.info("Found {} Java classes to analyze", javaClasses.size());
@@ -80,12 +106,30 @@ public class ClassDiagramGeneratorService {
         // Generate enhanced JSON representation
         Map<String, Object> jsonData = generateEnhancedJsonRepresentation(javaClasses, analysisResults, treeData);
         
+        // Add project SHA to JSON data for caching
+        jsonData.put("projectSha", projectSha);
+        
         // Create umlDigr directory and save files
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
         String repositoryName = extractRepositoryName(treeData.getRepositoryUrl());
         
+        // Generate PNG from PlantUML
+        String pngBase64 = null;
+        try {
+            pngBase64 = plantUmlToPngService.convertToPngBase64(enhancedPlantUml);
+            logger.info("Successfully generated PNG from PlantUML");
+        } catch (Exception e) {
+            logger.error("Error generating PNG from PlantUML: {}", e.getMessage(), e);
+        }
+        
         try {
             saveToFiles(enhancedPlantUml, jsonData, repositoryName, timestamp);
+            
+            // Also save PNG file if generation was successful
+            if (pngBase64 != null) {
+                String pngFileName = String.format("%s_%s.png", repositoryName, timestamp);
+                plantUmlToPngService.savePngToFile(enhancedPlantUml, pngFileName, "umlDigr");
+            }
         } catch (IOException e) {
             logger.error("Error saving files: {}", e.getMessage(), e);
         }
@@ -94,6 +138,7 @@ public class ClassDiagramGeneratorService {
         Map<String, Object> response = new HashMap<>();
         response.put("plantUmlGenerated", true);
         response.put("jsonGenerated", true);
+        response.put("pngGenerated", pngBase64 != null);
         response.put("classCount", javaClasses.size());
         response.put("analyzedCount", analysisResults.size());
         response.put("timestamp", timestamp);
@@ -101,6 +146,13 @@ public class ClassDiagramGeneratorService {
         response.put("plantUmlContent", enhancedPlantUml);
         response.put("jsonData", jsonData);
         response.put("analysisResults", analysisResults);
+        response.put("projectSha", projectSha);
+        response.put("cached", false);
+        
+        // Include PNG data in response
+        if (pngBase64 != null) {
+            response.put("pngBase64", pngBase64);
+        }
         
         return response;
     }
@@ -825,6 +877,7 @@ public class ClassDiagramGeneratorService {
         jsonData.put("totalClasses", javaClasses.size());
         jsonData.put("analyzedClasses", analysisResults.size());
         jsonData.put("enhancedAnalysis", true);
+        jsonData.put("pngGenerated", true);  // Indicate PNG was generated
         
         // Group by packages with enhanced analysis
         Map<String, List<Map<String, Object>>> packages = new HashMap<>();
@@ -923,6 +976,72 @@ public class ClassDiagramGeneratorService {
         objectMapper.writerWithDefaultPrettyPrinter().writeValue(jsonFilePath.toFile(), jsonData);
         
         logger.info("Files saved: {} and {}", plantUmlFileName, jsonFileName);
+    }
+    
+    /**
+     * Check for cached diagram by looking at existing JSON files in umlDigr directory
+     */
+    private Map<String, Object> checkForCachedDiagram(String repositoryName, String projectSha) {
+        try {
+            Path umlDigrPath = Paths.get("umlDigr");
+            if (!Files.exists(umlDigrPath)) {
+                return null;
+            }
+            
+            // Look for JSON files matching the repository name pattern
+            return Files.list(umlDigrPath)
+                .filter(path -> path.toString().endsWith(".json"))
+                .filter(path -> path.getFileName().toString().startsWith(repositoryName + "_"))
+                .map(jsonFile -> {
+                    try {
+                        // Read and parse the JSON file
+                        String jsonContent = Files.readString(jsonFile);
+                        Map<String, Object> jsonData = objectMapper.readValue(jsonContent, Map.class);
+                        
+                        // Check if the project SHA matches
+                        String cachedSha = (String) jsonData.get("projectSha");
+                        if (projectSha.equals(cachedSha)) {
+                            logger.info("Found matching cached diagram: {} with SHA: {}", jsonFile.getFileName(), cachedSha);
+                            
+                            // Also try to read the corresponding PlantUML file
+                            String pumlFileName = jsonFile.getFileName().toString().replace(".json", ".puml");
+                            Path pumlFile = umlDigrPath.resolve(pumlFileName);
+                            
+                            if (Files.exists(pumlFile)) {
+                                String plantUmlContent = Files.readString(pumlFile);
+                                jsonData.put("plantUmlContent", plantUmlContent);
+                                
+                                // Generate PNG from cached PlantUML content
+                                try {
+                                    String pngBase64 = plantUmlToPngService.convertToPngBase64(plantUmlContent);
+                                    jsonData.put("pngBase64", pngBase64);
+                                    jsonData.put("pngGenerated", true);
+                                    logger.info("Generated PNG from cached PlantUML content");
+                                } catch (Exception e) {
+                                    logger.warn("Error generating PNG from cached PlantUML: {}", e.getMessage());
+                                    jsonData.put("pngGenerated", false);
+                                }
+                            }
+                            
+                            // Mark as cached and return
+                            jsonData.put("cached", true);
+                            jsonData.put("cachedFile", jsonFile.getFileName().toString());
+                            
+                            return jsonData;
+                        }
+                    } catch (Exception e) {
+                        logger.warn("Error reading cached file {}: {}", jsonFile.getFileName(), e.getMessage());
+                    }
+                    return null;
+                })
+                .filter(result -> result != null)
+                .findFirst()
+                .orElse(null);
+                
+        } catch (Exception e) {
+            logger.error("Error checking for cached diagram: {}", e.getMessage());
+            return null;
+        }
     }
     
     // Inner class for Java class information

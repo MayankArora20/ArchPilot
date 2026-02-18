@@ -140,7 +140,7 @@ public class RepositoryFacade {
         }
         
         return new RepositoryTreeData(response.getRepositoryUrl(), response.getBranch(), 
-                                    response.getTree(), response.getPlatform());
+                                    response.getTree(), response.getPlatform(), response.getCommitSha());
     }
     
     private com.archpilot.model.TreeNode filterJavaClassesFromNode(com.archpilot.model.TreeNode node) {
@@ -206,7 +206,8 @@ public class RepositoryFacade {
                 originalTreeData.getRepositoryUrl(),
                 originalTreeData.getBranch(),
                 refinedTree,
-                originalTreeData.getPlatform()
+                originalTreeData.getPlatform(),
+                originalTreeData.getCommitSha()
         );
     }
 }

@@ -10,6 +10,7 @@ public class RepositoryTreeResponse {
     private String repositoryUrl;
     private String branch;
     private String platform;
+    private String commitSha;  // Add commit SHA field
     private List<TreeNode> tree;
     
     public RepositoryTreeResponse() {}
@@ -20,12 +21,13 @@ public class RepositoryTreeResponse {
     }
     
     public static RepositoryTreeResponse success(String repositoryUrl, String branch, 
-                                               List<TreeNode> tree, String platform) {
+                                               List<TreeNode> tree, String platform, String commitSha) {
         RepositoryTreeResponse response = new RepositoryTreeResponse("Success", "Tree structure retrieved successfully");
         response.repositoryUrl = repositoryUrl;
         response.branch = branch;
         response.tree = tree;
         response.platform = platform;
+        response.commitSha = commitSha;
         return response;
     }
     
@@ -48,6 +50,9 @@ public class RepositoryTreeResponse {
     
     public String getPlatform() { return platform; }
     public void setPlatform(String platform) { this.platform = platform; }
+    
+    public String getCommitSha() { return commitSha; }
+    public void setCommitSha(String commitSha) { this.commitSha = commitSha; }
     
     public List<TreeNode> getTree() { return tree; }
     public void setTree(List<TreeNode> tree) { this.tree = tree; }

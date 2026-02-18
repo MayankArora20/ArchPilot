@@ -43,6 +43,9 @@ dependencies {
     // Spring AI - OpenAI (for Google AI Studio compatibility)
     implementation 'org.springframework.ai:spring-ai-openai-spring-boot-starter'
     
+    // PlantUML for PNG generation
+    implementation 'net.sourceforge.plantuml:plantuml:1.2024.3'
+    
     // Swagger/OpenAPI
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0'
     

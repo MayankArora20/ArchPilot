@@ -6,16 +6,18 @@ public class RepositoryTreeData {
     private String repositoryUrl;
     private String branch;
     private String platform;
+    private String commitSha;  // Add commit SHA field
     private List<TreeNode> tree;
     
     public RepositoryTreeData() {}
     
     public RepositoryTreeData(String repositoryUrl, String branch, 
-                             List<TreeNode> tree, String platform) {
+                             List<TreeNode> tree, String platform, String commitSha) {
         this.repositoryUrl = repositoryUrl;
         this.branch = branch;
         this.tree = tree;
         this.platform = platform;
+        this.commitSha = commitSha;
     }
     
     // Getters and Setters
@@ -27,6 +29,9 @@ public class RepositoryTreeData {
     
     public String getPlatform() { return platform; }
     public void setPlatform(String platform) { this.platform = platform; }
+    
+    public String getCommitSha() { return commitSha; }
+    public void setCommitSha(String commitSha) { this.commitSha = commitSha; }
     
     public List<TreeNode> getTree() { return tree; }
     public void setTree(List<TreeNode> tree) { this.tree = tree; }

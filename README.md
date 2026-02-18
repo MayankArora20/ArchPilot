@@ -4,7 +4,7 @@ A comprehensive architectural analysis and design tool that combines AI-powered 
 
 ## Project Structure
 
-This repository contains two main components:
+This repository contains three main components:
 
 ### ArchPilotUI
 Angular-based frontend application providing:
@@ -12,6 +12,13 @@ Angular-based frontend application providing:
 - PlantUML diagram visualization
 - Project management capabilities
 - Modern, responsive UI design
+
+### ArchPilotUILite
+Lightweight Vite-based frontend alternative providing:
+- Fast, minimal interface for core functionality
+- Simplified user experience
+- Quick development and deployment
+- Modern web technologies (Vite + TypeScript)
 
 ### ArchPilotBackend
 Spring Boot backend service providing:
@@ -29,6 +36,14 @@ npm install
 npm start
 ```
 Access the UI at `http://localhost:4200`
+
+### Frontend Lite (ArchPilotUILite)
+```bash
+cd ArchPilotUILite
+npm install
+npm run dev
+```
+Access the Lite UI at `http://localhost:5173`
 
 ### Backend (ArchPilotBackend)
 ```bash
@@ -48,13 +63,14 @@ API available at `http://localhost:8080`
 ## Documentation
 
 - [UI Documentation](./ArchPilotUI/README.md)
+- [UI Lite Documentation](./ArchPilotUILite/README.md)
 - [Backend Documentation](./ArchPilotBackend/README.md)
 - [Architecture Guide](./ArchPilotUI/ARCHITECTURE.md)
 - [Development Guide](./ArchPilotUI/DEVELOPMENT_GUIDE.md)
 
 ## Contributing
 
-Each component (UI and Backend) has its own git configuration for independent development while maintaining the unified project structure.
+Each component (UI, UI Lite, and Backend) has its own git configuration for independent development while maintaining the unified project structure.
 
 ## License
 

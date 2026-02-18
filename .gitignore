@@ -20,3 +20,6 @@ logs/
 # Temporary files
 *.tmp
 *.temp
+
+# Monorepo - Independent projects with separate git tracking
+ArchPilotUILite/
