@@ -76,12 +76,12 @@ public class ChatController {
     }
     
     @PostMapping("/message")
-    @Operation(summary = "Send chat message", description = "Send a message in the current chat session")
+    @Operation(summary = "Send chat message", description = "Send a message in the current chat session and receive a structured JSON response")
     @ApiResponses(value = {
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Message processed successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Message processed successfully with JSON response"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "No active session or invalid message")
     })
-    public ResponseEntity<String> sendMessage(
+    public ResponseEntity<ApiResponse<ChatResponse>> sendMessage(
             @Valid @RequestBody ChatMessageRequest request, 
             HttpSession httpSession) {
         
@@ -91,7 +91,9 @@ public class ChatController {
             
             if (chatSession == null) {
                 logger.warn("No active chat session found");
-                return ResponseEntity.badRequest().body("No active chat session. Please initialize a session first.");
+                ChatResponse errorResponse = new ChatResponse("No active chat session. Please initialize a session first.");
+                errorResponse.setSessionActive(false);
+                return ResponseEntity.badRequest().body(ApiResponse.error("No active session", errorResponse));
             }
             
             logger.info("Processing message for project: {}", chatSession.getProjectName());
@@ -102,12 +104,22 @@ public class ChatController {
             // Update session in HTTP session
             httpSession.setAttribute(CHAT_SESSION_KEY, chatSession);
             
-            // Return only the response text
-            return ResponseEntity.ok(assistantResponse);
+            // Create proper JSON response
+            ChatResponse response = new ChatResponse(
+                httpSession.getId(),
+                chatSession.getProjectName(),
+                assistantResponse,
+                true
+            );
+            response.setChatHistory(chatSession.getMessages());
+            
+            return ResponseEntity.ok(ApiResponse.success("Message processed successfully", response));
             
         } catch (Exception e) {
             logger.error("Error processing chat message: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError().body("Failed to process message");
+            ChatResponse errorResponse = new ChatResponse("Failed to process message");
+            errorResponse.setSessionActive(false);
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Internal server error", errorResponse));
         }
     }
     

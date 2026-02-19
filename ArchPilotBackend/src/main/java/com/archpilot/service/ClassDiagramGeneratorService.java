@@ -1,5 +1,7 @@
 package com.archpilot.service;
 
+import java.io.FileWriter;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -20,12 +22,14 @@ import com.archpilot.dto.ClassDiagramResponse;
 import com.archpilot.model.RepositoryTreeData;
 import com.archpilot.model.TreeNode;
 import com.archpilot.service.agent.GeminiAgentService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.archpilot.service.agent.GeminiClassAnalyzerService;
 
 @Service
 public class ClassDiagramGeneratorService {
     
     private static final Logger logger = LoggerFactory.getLogger(ClassDiagramGeneratorService.class);
+    private final ObjectMapper objectMapper = new ObjectMapper();
     
     @Autowired
     private GeminiAgentService geminiAgentService;
@@ -100,6 +104,12 @@ public class ClassDiagramGeneratorService {
         // Generate enhanced PlantUML diagram with analysis results
         String enhancedPlantUml = generateEnhancedPlantUMLFromAnalysis(basicPlantUml, analysisResults, treeData);
         
+        // Generate enhanced JSON representation
+        Map<String, Object> jsonData = generateEnhancedJsonRepresentation(javaClasses, analysisResults, treeData);
+        
+        // Add project SHA to JSON data for caching
+        jsonData.put("projectSha", projectSha);
+        
         // Generate PNG from enhanced PlantUML
         String pngBase64 = null;
         try {
@@ -116,16 +126,37 @@ public class ClassDiagramGeneratorService {
         String mainPngFileName = String.format("%s_%s.png", repositoryName, timestamp);
         String litePngFileName = String.format("%s_%s_lite.png", repositoryName, timestamp);
         
-        // Save PNG file to disk and metadata for caching
+        // Save PNG file, JSON file, and metadata for caching
         try {
             plantUmlToPngService.savePngToFile(enhancedPlantUml, mainPngFileName, "umlDigr");
             logger.info("Saved PNG file: {}", mainPngFileName);
             
+        } catch (Exception e) {
+            logger.error("Error saving PNG file: {}", e.getMessage(), e);
+        }
+        
+        try {
+            // Save JSON file with analysis results
+            saveJsonFile(jsonData, repositoryName, timestamp);
+            
+        } catch (Exception e) {
+            logger.error("Error saving JSON file: {}", e.getMessage(), e);
+        }
+        
+        try {
+            // Save PlantUML file
+            savePlantUmlFile(enhancedPlantUml, repositoryName, timestamp);
+            
+        } catch (Exception e) {
+            logger.error("Error saving PlantUML file: {}", e.getMessage(), e);
+        }
+        
+        try {
             // Save metadata for caching
             saveMetadata(repositoryName, timestamp, javaClasses.size(), projectSha);
             
         } catch (Exception e) {
-            logger.warn("Error saving PNG file or metadata: {}", e.getMessage());
+            logger.error("Error saving metadata file: {}", e.getMessage(), e);
         }
         
         // Create response data
@@ -158,10 +189,12 @@ public class ClassDiagramGeneratorService {
                 .filter(path -> !path.getFileName().toString().contains("_lite.png")) // Skip lite versions
                 .map(pngFile -> {
                     try {
-                        // Check if there's a corresponding metadata file with the same SHA
+                        // Check if there's a corresponding metadata file and JSON file with the same SHA
                         String pngFileName = pngFile.getFileName().toString();
                         String metadataFileName = pngFileName.replace(".png", "_metadata.txt");
+                        String jsonFileName = pngFileName.replace(".png", ".json");
                         Path metadataFile = umlDigrPath.resolve(metadataFileName);
+                        Path jsonFile = umlDigrPath.resolve(jsonFileName);
                         
                         if (Files.exists(metadataFile)) {
                             String metadataContent = Files.readString(metadataFile);
@@ -181,6 +214,11 @@ public class ClassDiagramGeneratorService {
                                 int classCount = classCountStr != null ? Integer.parseInt(classCountStr) : 0;
                                 
                                 String litePngFileName = pngFileName.replace(".png", "_lite.png");
+                                
+                                // Log additional cached files found
+                                if (Files.exists(jsonFile)) {
+                                    logger.info("Found corresponding JSON file: {}", jsonFileName);
+                                }
                                 
                                 // Create response data
                                 ClassDiagramResponse.ClassDiagramData data = new ClassDiagramResponse.ClassDiagramData(
@@ -889,6 +927,240 @@ public class ClassDiagramGeneratorService {
                 }
             }
         }
+    }
+    
+    /**
+     * Generate enhanced JSON representation with analysis results
+     */
+    private Map<String, Object> generateEnhancedJsonRepresentation(List<JavaClassInfo> javaClasses, 
+                                                                 Map<String, GeminiClassAnalyzerService.ClassAnalysisResult> analysisResults,
+                                                                 RepositoryTreeData treeData) {
+        Map<String, Object> jsonData = new HashMap<>();
+        
+        jsonData.put("repositoryUrl", treeData.getRepositoryUrl());
+        jsonData.put("branch", treeData.getBranch());
+        jsonData.put("platform", treeData.getPlatform());
+        jsonData.put("commitSha", treeData.getCommitSha());
+        jsonData.put("generatedAt", LocalDateTime.now().toString());
+        jsonData.put("totalClasses", javaClasses.size());
+        jsonData.put("analyzedClasses", analysisResults.size());
+        jsonData.put("enhancedAnalysis", true);
+        jsonData.put("pngGenerated", true);
+        
+        // Group by packages with enhanced analysis
+        Map<String, List<Map<String, Object>>> packages = new HashMap<>();
+        
+        for (JavaClassInfo classInfo : javaClasses) {
+            String packageName = classInfo.getPackageName();
+            if (packageName.isEmpty()) {
+                packageName = "default";
+            }
+            
+            Map<String, Object> classData = new HashMap<>();
+            classData.put("className", classInfo.getClassName());
+            classData.put("fullPath", classInfo.getFullPath());
+            classData.put("sha", classInfo.getSha());
+            classData.put("size", classInfo.getSize());
+            classData.put("url", classInfo.getUrl());
+            classData.put("downloadUrl", classInfo.getDownloadUrl());
+            
+            // Add enhanced analysis data if available
+            GeminiClassAnalyzerService.ClassAnalysisResult analysis = analysisResults.get(classInfo.getClassName());
+            if (analysis != null) {
+                classData.put("analysisStatus", analysis.getAnalysisStatus());
+                classData.put("classType", analysis.getClassType());
+                classData.put("extendsClass", analysis.getExtendsClass());
+                classData.put("rawAnalysis", analysis.getRawAnalysis());
+                
+                // Parse additional details from raw analysis
+                if (analysis.getRawAnalysis() != null) {
+                    classData.put("implementsInterfaces", extractJsonArrayValues(analysis.getRawAnalysis(), "implements"));
+                    classData.put("usedClasses", extractJsonArrayValues(analysis.getRawAnalysis(), "usedClasses"));
+                    classData.put("annotations", extractJsonArrayValues(analysis.getRawAnalysis(), "annotations"));
+                    classData.put("fields", parseFieldsFromRawAnalysis(analysis.getRawAnalysis()));
+                    classData.put("methods", parseMethodsFromRawAnalysis(analysis.getRawAnalysis()));
+                }
+            } else {
+                classData.put("analysisStatus", "NOT_ANALYZED");
+            }
+            
+            packages.computeIfAbsent(packageName, k -> new ArrayList<>()).add(classData);
+        }
+        
+        jsonData.put("packages", packages);
+        
+        // Add relationship summary
+        Map<String, Object> relationships = new HashMap<>();
+        int inheritanceCount = 0;
+        int implementationCount = 0;
+        int usageCount = 0;
+        
+        for (GeminiClassAnalyzerService.ClassAnalysisResult analysis : analysisResults.values()) {
+            if (analysis != null && "SUCCESS".equals(analysis.getAnalysisStatus()) && analysis.getRawAnalysis() != null) {
+                String extendsClass = extractJsonValue(analysis.getRawAnalysis(), "extends");
+                if (extendsClass != null && !extendsClass.equals("null") && !extendsClass.isEmpty()) {
+                    inheritanceCount++;
+                }
+                
+                List<String> implementsInterfaces = extractJsonArrayValues(analysis.getRawAnalysis(), "implements");
+                if (implementsInterfaces != null) {
+                    implementationCount += implementsInterfaces.size();
+                }
+                
+                List<String> usedClasses = extractJsonArrayValues(analysis.getRawAnalysis(), "usedClasses");
+                if (usedClasses != null) {
+                    usageCount += usedClasses.size();
+                }
+            }
+        }
+        
+        relationships.put("inheritanceRelationships", inheritanceCount);
+        relationships.put("interfaceImplementations", implementationCount);
+        relationships.put("usageRelationships", usageCount);
+        jsonData.put("relationshipSummary", relationships);
+        
+        return jsonData;
+    }
+    
+    /**
+     * Extract array values from JSON string
+     */
+    private List<String> extractJsonArrayValues(String json, String arrayName) {
+        try {
+            String arraySection = extractJsonSection(json, arrayName);
+            if (arraySection != null) {
+                List<String> values = new ArrayList<>();
+                String[] items = arraySection.split(",");
+                for (String item : items) {
+                    String cleanItem = item.replaceAll("[\"\\s\\[\\]]", "").trim();
+                    if (!cleanItem.isEmpty()) {
+                        values.add(cleanItem);
+                    }
+                }
+                return values;
+            }
+        } catch (Exception e) {
+            logger.warn("Error extracting JSON array {}: {}", arrayName, e.getMessage());
+        }
+        return new ArrayList<>();
+    }
+    
+    /**
+     * Parse fields from raw analysis JSON
+     */
+    private List<Map<String, Object>> parseFieldsFromRawAnalysis(String rawAnalysis) {
+        List<Map<String, Object>> fields = new ArrayList<>();
+        if (rawAnalysis == null) return fields;
+        
+        try {
+            String fieldsSection = extractJsonSection(rawAnalysis, "fields");
+            if (fieldsSection != null) {
+                String[] fieldBlocks = fieldsSection.split("\\{");
+                for (String field : fieldBlocks) {
+                    if (field.contains("\"name\"")) {
+                        Map<String, Object> fieldData = new HashMap<>();
+                        fieldData.put("name", extractJsonValue(field, "name"));
+                        fieldData.put("type", extractJsonValue(field, "type"));
+                        fieldData.put("visibility", extractJsonValue(field, "visibility"));
+                        fieldData.put("isStatic", field.contains("\"isStatic\": true"));
+                        fieldData.put("isFinal", field.contains("\"isFinal\": true"));
+                        fields.add(fieldData);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Error parsing fields from raw analysis: {}", e.getMessage());
+        }
+        
+        return fields;
+    }
+    
+    /**
+     * Parse methods from raw analysis JSON
+     */
+    private List<Map<String, Object>> parseMethodsFromRawAnalysis(String rawAnalysis) {
+        List<Map<String, Object>> methods = new ArrayList<>();
+        if (rawAnalysis == null) return methods;
+        
+        try {
+            String methodsSection = extractJsonSection(rawAnalysis, "methods");
+            if (methodsSection != null) {
+                String[] methodBlocks = methodsSection.split("\\{");
+                for (String method : methodBlocks) {
+                    if (method.contains("\"name\"")) {
+                        Map<String, Object> methodData = new HashMap<>();
+                        methodData.put("name", extractJsonValue(method, "name"));
+                        methodData.put("returnType", extractJsonValue(method, "returnType"));
+                        methodData.put("visibility", extractJsonValue(method, "visibility"));
+                        methodData.put("isStatic", method.contains("\"isStatic\": true"));
+                        methodData.put("isAbstract", method.contains("\"isAbstract\": true"));
+                        
+                        // Parse parameters (simplified)
+                        List<Map<String, String>> parameters = new ArrayList<>();
+                        String parametersSection = extractJsonSection(method, "parameters");
+                        if (parametersSection != null) {
+                            String[] paramBlocks = parametersSection.split("\\{");
+                            for (String param : paramBlocks) {
+                                if (param.contains("\"name\"")) {
+                                    Map<String, String> paramData = new HashMap<>();
+                                    paramData.put("name", extractJsonValue(param, "name"));
+                                    paramData.put("type", extractJsonValue(param, "type"));
+                                    parameters.add(paramData);
+                                }
+                            }
+                        }
+                        methodData.put("parameters", parameters);
+                        methods.add(methodData);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Error parsing methods from raw analysis: {}", e.getMessage());
+        }
+        
+        return methods;
+    }
+    
+    /**
+     * Save JSON file with analysis results
+     */
+    private void saveJsonFile(Map<String, Object> jsonData, String repositoryName, String timestamp) throws IOException {
+        // Create umlDigr directory if it doesn't exist
+        Path umlDigrPath = Paths.get("umlDigr");
+        if (!Files.exists(umlDigrPath)) {
+            Files.createDirectories(umlDigrPath);
+            logger.info("Created umlDigr directory");
+        }
+        
+        // Save JSON file
+        String jsonFileName = String.format("%s_%s.json", repositoryName, timestamp);
+        Path jsonFilePath = umlDigrPath.resolve(jsonFileName);
+        
+        logger.info("Attempting to save JSON file: {}", jsonFilePath.toAbsolutePath());
+        objectMapper.writerWithDefaultPrettyPrinter().writeValue(jsonFilePath.toFile(), jsonData);
+        logger.info("Successfully saved JSON file: {}", jsonFileName);
+    }
+    
+    /**
+     * Save PlantUML file
+     */
+    private void savePlantUmlFile(String plantUmlContent, String repositoryName, String timestamp) throws IOException {
+        // Create umlDigr directory if it doesn't exist
+        Path umlDigrPath = Paths.get("umlDigr");
+        if (!Files.exists(umlDigrPath)) {
+            Files.createDirectories(umlDigrPath);
+            logger.info("Created umlDigr directory");
+        }
+        
+        // Save PlantUML file
+        String plantUmlFileName = String.format("%s_%s.puml", repositoryName, timestamp);
+        Path plantUmlFilePath = umlDigrPath.resolve(plantUmlFileName);
+        
+        logger.info("Attempting to save PlantUML file: {}", plantUmlFilePath.toAbsolutePath());
+        try (FileWriter writer = new FileWriter(plantUmlFilePath.toFile())) {
+            writer.write(plantUmlContent);
+        }
+        logger.info("Successfully saved PlantUML file: {}", plantUmlFileName);
     }
     
     // Inner class for Java class information

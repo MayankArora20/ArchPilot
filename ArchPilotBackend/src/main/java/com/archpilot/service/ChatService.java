@@ -2,9 +2,11 @@ package com.archpilot.service;
 
 import com.archpilot.model.ChatMessage;
 import com.archpilot.model.ChatSession;
+import com.archpilot.service.agent.JavaArchitectAgentService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -19,6 +21,9 @@ public class ChatService {
     
     private static final Logger logger = LoggerFactory.getLogger(ChatService.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
+    
+    @Autowired
+    private JavaArchitectAgentService javaArchitectAgentService;
     
     public ChatSession initializeSession(String projectName) throws IOException {
         logger.info("Initializing chat session for project: {}", projectName);
@@ -54,8 +59,8 @@ public class ChatService {
         ChatMessage userMsg = new ChatMessage(userMessage, "user");
         session.addMessage(userMsg);
         
-        // For now, return "work in progress" as requested
-        String response = "Work in progress";
+        // Process message through Java Architect Agent
+        String response = javaArchitectAgentService.processArchitectRequest(session, userMessage);
         
         // Add assistant response to session
         ChatMessage assistantMsg = new ChatMessage(response, "assistant");
