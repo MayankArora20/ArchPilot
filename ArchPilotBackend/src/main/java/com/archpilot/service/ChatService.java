@@ -59,7 +59,7 @@ public class ChatService {
         ChatMessage userMsg = new ChatMessage(userMessage, "user");
         session.addMessage(userMsg);
         
-        // Process message through Java Architect Agent
+        // Process message through Java Architect Agent (which now includes enhanced flow analysis)
         String response = javaArchitectAgentService.processArchitectRequest(session, userMessage);
         
         // Add assistant response to session

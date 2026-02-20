@@ -21,9 +21,9 @@ import org.springframework.stereotype.Service;
 import com.archpilot.dto.ClassDiagramResponse;
 import com.archpilot.model.RepositoryTreeData;
 import com.archpilot.model.TreeNode;
-import com.archpilot.service.agent.GeminiAgentService;
+import com.archpilot.service.agent.GeminiChatAgentService;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.archpilot.service.agent.GeminiClassAnalyzerService;
+import com.archpilot.service.agent.GeminiClassAnalyzerAgentService;
 
 @Service
 public class ClassDiagramGeneratorService {
@@ -32,7 +32,7 @@ public class ClassDiagramGeneratorService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     
     @Autowired
-    private GeminiAgentService geminiAgentService;
+    private GeminiChatAgentService geminiChatAgentService;
     
     @Autowired
     private PlantUmlToPngService plantUmlToPngService;
@@ -97,7 +97,7 @@ public class ClassDiagramGeneratorService {
         logger.info("Generated basic PlantUML structure");
         
         // Fetch file contents and analyze with enhanced relationships
-        Map<String, GeminiClassAnalyzerService.ClassAnalysisResult> analysisResults = 
+        Map<String, GeminiClassAnalyzerAgentService.ClassAnalysisResult> analysisResults = 
             analyzeClassesSequentially(javaClasses, treeData, basicPlantUml);
         logger.info("Completed enhanced analysis for {} classes", analysisResults.size());
         
@@ -436,10 +436,10 @@ public class ClassDiagramGeneratorService {
     /**
      * Analyze classes sequentially with enhanced relationship detection
      */
-    private Map<String, GeminiClassAnalyzerService.ClassAnalysisResult> analyzeClassesSequentially(
+    private Map<String, GeminiClassAnalyzerAgentService.ClassAnalysisResult> analyzeClassesSequentially(
             List<JavaClassInfo> javaClasses, RepositoryTreeData treeData, String basicPlantUml) {
         
-        Map<String, GeminiClassAnalyzerService.ClassAnalysisResult> analysisResults = new HashMap<>();
+        Map<String, GeminiClassAnalyzerAgentService.ClassAnalysisResult> analysisResults = new HashMap<>();
         
         // Limit the number of files to analyze based on token guardrail (max 5 files for free tier)
         int maxFiles = Math.min(javaClasses.size(), 5);
@@ -460,7 +460,7 @@ public class ClassDiagramGeneratorService {
                     }
                     
                     // Analyze using Gemini with context of existing UML
-                    GeminiClassAnalyzerService.ClassAnalysisResult result = 
+                    GeminiClassAnalyzerAgentService.ClassAnalysisResult result = 
                         analyzeClassWithContext(javaClass.getClassName(), content, basicPlantUml);
                     
                     if (result != null) {
@@ -541,7 +541,7 @@ public class ClassDiagramGeneratorService {
     /**
      * Analyze class with enhanced context for relationships
      */
-    private GeminiClassAnalyzerService.ClassAnalysisResult analyzeClassWithContext(
+    private GeminiClassAnalyzerAgentService.ClassAnalysisResult analyzeClassWithContext(
             String className, String content, String existingUml) {
         
         logger.info("Starting enhanced Gemini analysis for class: {}", className);
@@ -607,7 +607,7 @@ public class ClassDiagramGeneratorService {
         
         try {
             logger.info("Sending enhanced prompt to Gemini for class: {}", className);
-            String response = geminiAgentService.askQuestion(prompt);
+            String response = geminiChatAgentService.askQuestion(prompt);
             logger.info("Received response from Gemini for class: {} (length: {})", className, response != null ? response.length() : 0);
             
             if (response != null && !response.trim().isEmpty()) {
@@ -625,7 +625,7 @@ public class ClassDiagramGeneratorService {
     /**
      * Parse Gemini response into structured result
      */
-    private GeminiClassAnalyzerService.ClassAnalysisResult parseGeminiResponse(String className, String response) {
+    private GeminiClassAnalyzerAgentService.ClassAnalysisResult parseGeminiResponse(String className, String response) {
         try {
             // Extract JSON from response
             String jsonPart = extractJsonFromResponse(response);
@@ -654,8 +654,8 @@ public class ClassDiagramGeneratorService {
     /**
      * Parse JSON to ClassAnalysisResult
      */
-    private GeminiClassAnalyzerService.ClassAnalysisResult parseJsonToClassAnalysisResult(String json) {
-        GeminiClassAnalyzerService.ClassAnalysisResult result = new GeminiClassAnalyzerService.ClassAnalysisResult();
+    private GeminiClassAnalyzerAgentService.ClassAnalysisResult parseJsonToClassAnalysisResult(String json) {
+        GeminiClassAnalyzerAgentService.ClassAnalysisResult result = new GeminiClassAnalyzerAgentService.ClassAnalysisResult();
         
         try {
             // Extract basic information using simple string parsing
@@ -691,8 +691,8 @@ public class ClassDiagramGeneratorService {
     /**
      * Create fallback result for failed analysis
      */
-    private GeminiClassAnalyzerService.ClassAnalysisResult createFallbackResult(String className) {
-        GeminiClassAnalyzerService.ClassAnalysisResult result = new GeminiClassAnalyzerService.ClassAnalysisResult();
+    private GeminiClassAnalyzerAgentService.ClassAnalysisResult createFallbackResult(String className) {
+        GeminiClassAnalyzerAgentService.ClassAnalysisResult result = new GeminiClassAnalyzerAgentService.ClassAnalysisResult();
         result.setClassName(className);
         result.setClassType("class");
         result.setAnalysisStatus("FAILED");
@@ -703,7 +703,7 @@ public class ClassDiagramGeneratorService {
      * Generate enhanced PlantUML from analysis results with relationships
      */
     private String generateEnhancedPlantUMLFromAnalysis(String basicPlantUml, 
-                                                       Map<String, GeminiClassAnalyzerService.ClassAnalysisResult> analysisResults,
+                                                       Map<String, GeminiClassAnalyzerAgentService.ClassAnalysisResult> analysisResults,
                                                        RepositoryTreeData treeData) {
         StringBuilder enhanced = new StringBuilder();
         
@@ -713,7 +713,7 @@ public class ClassDiagramGeneratorService {
         
         // Group classes by package
         Map<String, List<JavaClassInfo>> packageGroups = new HashMap<>();
-        for (GeminiClassAnalyzerService.ClassAnalysisResult analysis : analysisResults.values()) {
+        for (GeminiClassAnalyzerAgentService.ClassAnalysisResult analysis : analysisResults.values()) {
             if (analysis != null) {
                 String packageName = analysis.getPackageName();
                 if (packageName == null || packageName.isEmpty()) {
@@ -739,7 +739,7 @@ public class ClassDiagramGeneratorService {
             }
             
             for (JavaClassInfo classInfo : classes) {
-                GeminiClassAnalyzerService.ClassAnalysisResult analysis = analysisResults.get(classInfo.getClassName());
+                GeminiClassAnalyzerAgentService.ClassAnalysisResult analysis = analysisResults.get(classInfo.getClassName());
                 
                 if (analysis != null && "SUCCESS".equals(analysis.getAnalysisStatus())) {
                     generateDetailedClassDefinition(enhanced, analysis);
@@ -762,7 +762,7 @@ public class ClassDiagramGeneratorService {
     /**
      * Generate detailed class definition with fields and methods
      */
-    private void generateDetailedClassDefinition(StringBuilder plantUml, GeminiClassAnalyzerService.ClassAnalysisResult analysis) {
+    private void generateDetailedClassDefinition(StringBuilder plantUml, GeminiClassAnalyzerAgentService.ClassAnalysisResult analysis) {
         String classType = analysis.getClassType() != null ? analysis.getClassType() : "class";
         String className = analysis.getClassName();
         
@@ -898,10 +898,10 @@ public class ClassDiagramGeneratorService {
      * Generate class relationships from analysis results
      */
     private void generateClassRelationshipsFromAnalysis(StringBuilder plantUml, 
-                                                       Map<String, GeminiClassAnalyzerService.ClassAnalysisResult> analysisResults) {
+                                                       Map<String, GeminiClassAnalyzerAgentService.ClassAnalysisResult> analysisResults) {
         plantUml.append("\n' Class Relationships\n");
         
-        for (GeminiClassAnalyzerService.ClassAnalysisResult analysis : analysisResults.values()) {
+        for (GeminiClassAnalyzerAgentService.ClassAnalysisResult analysis : analysisResults.values()) {
             if (analysis == null || !"SUCCESS".equals(analysis.getAnalysisStatus())) continue;
             
             String className = analysis.getClassName();
@@ -933,7 +933,7 @@ public class ClassDiagramGeneratorService {
      * Generate enhanced JSON representation with analysis results
      */
     private Map<String, Object> generateEnhancedJsonRepresentation(List<JavaClassInfo> javaClasses, 
-                                                                 Map<String, GeminiClassAnalyzerService.ClassAnalysisResult> analysisResults,
+                                                                 Map<String, GeminiClassAnalyzerAgentService.ClassAnalysisResult> analysisResults,
                                                                  RepositoryTreeData treeData) {
         Map<String, Object> jsonData = new HashMap<>();
         
@@ -965,7 +965,7 @@ public class ClassDiagramGeneratorService {
             classData.put("downloadUrl", classInfo.getDownloadUrl());
             
             // Add enhanced analysis data if available
-            GeminiClassAnalyzerService.ClassAnalysisResult analysis = analysisResults.get(classInfo.getClassName());
+            GeminiClassAnalyzerAgentService.ClassAnalysisResult analysis = analysisResults.get(classInfo.getClassName());
             if (analysis != null) {
                 classData.put("analysisStatus", analysis.getAnalysisStatus());
                 classData.put("classType", analysis.getClassType());
@@ -995,7 +995,7 @@ public class ClassDiagramGeneratorService {
         int implementationCount = 0;
         int usageCount = 0;
         
-        for (GeminiClassAnalyzerService.ClassAnalysisResult analysis : analysisResults.values()) {
+        for (GeminiClassAnalyzerAgentService.ClassAnalysisResult analysis : analysisResults.values()) {
             if (analysis != null && "SUCCESS".equals(analysis.getAnalysisStatus()) && analysis.getRawAnalysis() != null) {
                 String extendsClass = extractJsonValue(analysis.getRawAnalysis(), "extends");
                 if (extendsClass != null && !extendsClass.equals("null") && !extendsClass.isEmpty()) {

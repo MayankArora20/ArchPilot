@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '3.4.1'
     id 'io.spring.dependency-management' version '1.1.7'
+    id 'com.github.ben-manes.versions' version '0.51.0'
 }
 
 group = 'com.archpilot'
@@ -62,4 +63,72 @@ dependencyManagement {
 
 tasks.named('test') {
     useJUnitPlatform()
+    
+    // Enhanced test reporting
+    reports {
+        html.required = true
+        junitXml.required = true
+    }
+    
+    // Test output configuration
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat "full"
+        showStandardStreams = false
+    }
+    
+    // Generate test report even if tests fail
+    finalizedBy jacocoTestReport
+}
+
+// Jacoco for code coverage reports
+apply plugin: 'jacoco'
+
+jacoco {
+    toolVersion = "0.8.11"
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+        csv.required = false
+    }
+    
+    finalizedBy jacocoTestCoverageVerification
+}
+
+jacocoTestCoverageVerification {
+    violationRules {
+        rule {
+            limit {
+                minimum = 0.60 // 60% minimum coverage
+            }
+        }
+    }
+}
+
+// Task to open test reports in browser
+task openTestReport {
+    doLast {
+        def reportFile = file("$buildDir/reports/tests/test/index.html")
+        if (reportFile.exists()) {
+            java.awt.Desktop.desktop.browse(reportFile.toURI())
+        } else {
+            println "Test report not found. Run 'gradle test' first."
+        }
+    }
+}
+
+// Task to open coverage report in browser  
+task openCoverageReport {
+    doLast {
+        def reportFile = file("$buildDir/reports/jacoco/test/html/index.html")
+        if (reportFile.exists()) {
+            java.awt.Desktop.desktop.browse(reportFile.toURI())
+        } else {
+            println "Coverage report not found. Run 'gradle test jacocoTestReport' first."
+        }
+    }
 }

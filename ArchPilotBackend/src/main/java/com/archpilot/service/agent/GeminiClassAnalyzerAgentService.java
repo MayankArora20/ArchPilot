@@ -14,14 +14,44 @@ import org.springframework.stereotype.Service;
 
 import com.archpilot.service.ClassDiagramGeneratorService.JavaClassInfo;
 
+/**
+ * Gemini Class Analyzer Agent Service
+ * 
+ * Main Context:
+ * - Specialized AI agent for analyzing Java class files and extracting structural information
+ * - Uses Google's Gemini AI to understand class relationships, methods, fields, and dependencies
+ * - Performs parallel analysis of multiple Java classes for enhanced UML diagram generation
+ * - Extracts class-level metadata including inheritance, interfaces, annotations, and usage patterns
+ * - Provides structured analysis results for PlantUML diagram enhancement
+ * 
+ * Token Guardrail Protection:
+ * - This agent is automatically protected by the TokenGuardrailInterceptor
+ * - Uses a controlled thread pool (2 threads) to manage API rate limits
+ * - Token consumption is tracked and managed automatically through the guardrail system
+ * - Respects the dual bucket strategy (RPM + TPM) for Gemini API calls
+ * 
+ * Analysis Capabilities:
+ * - Class structure analysis (fields, methods, constructors)
+ * - Inheritance and interface relationship detection
+ * - Cross-class dependency identification
+ * - Annotation and modifier extraction
+ * - Package and import analysis
+ * - Design pattern recognition support
+ * 
+ * Performance Features:
+ * - Parallel processing with configurable thread pool
+ * - Timeout management for AI API calls
+ * - Fallback mechanisms for failed analyses
+ * - Concurrent result collection and aggregation
+ */
 @Service
-public class GeminiClassAnalyzerService {
+public class GeminiClassAnalyzerAgentService {
 
-    private static final Logger logger = LoggerFactory.getLogger(GeminiClassAnalyzerService.class);
+    private static final Logger logger = LoggerFactory.getLogger(GeminiClassAnalyzerAgentService.class);
     private final ChatClient chatClient;
     private final ExecutorService executorService;
 
-    public GeminiClassAnalyzerService(ChatClient.Builder chatClientBuilder) {
+    public GeminiClassAnalyzerAgentService(ChatClient.Builder chatClientBuilder) {
         this.chatClient = chatClientBuilder.build();
         // Using 2 threads as per TokenGuardrail strategy to manage API rate limits
         this.executorService = Executors.newFixedThreadPool(2);

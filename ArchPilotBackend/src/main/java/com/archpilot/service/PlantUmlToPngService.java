@@ -60,4 +60,30 @@ public class PlantUmlToPngService {
         
         logger.info("PNG file saved: {}", pngFilePath.toString());
     }
+    
+    /**
+     * Convert PlantUML file to PNG file
+     * @param plantUmlFilePath Path to the .puml file
+     * @throws IOException if conversion fails
+     */
+    public void convertPumlFileToPng(String plantUmlFilePath) throws IOException {
+        logger.info("Converting PlantUML file to PNG: {}", plantUmlFilePath);
+        
+        Path pumlPath = Paths.get(plantUmlFilePath);
+        if (!Files.exists(pumlPath)) {
+            throw new IOException("PlantUML file not found: " + plantUmlFilePath);
+        }
+        
+        // Read PlantUML content
+        String plantUmlContent = Files.readString(pumlPath);
+        
+        // Generate PNG file path (replace .puml with .png)
+        String pngFilePath = plantUmlFilePath.replaceAll("\\.puml$", ".png");
+        
+        // Convert and save
+        byte[] pngBytes = convertToPng(plantUmlContent);
+        Files.write(Paths.get(pngFilePath), pngBytes);
+        
+        logger.info("PNG file created: {}", pngFilePath);
+    }
 }
